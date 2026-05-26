@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vllm-pangu-v2-moe"
+version = "0.1.0"
+description = "Pangu V2 MoE compatibility plugin for vLLM/vllm-ascend 0.18.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.entry-points."vllm.general_plugins"]
+pangu_v2_moe = "vllm_pangu_v2_moe:register"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+omni_npu = ["**/*.json", "**/*.yaml", "**/*.yml", "**/*.txt"]
