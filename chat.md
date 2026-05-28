@@ -1089,63 +1089,15 @@ static sink / DSA / SWA 返回什么 KV spec
 
 > 我能否使用vllm-ascend0.18.0正式版本进行该模型的适配，我的本地没有vllm-ascend以及vllm，你先把仓下载下来，然后分析下如何适配
 
-<details><summary>19 previous messages</summary>
+<details><summary>8 previous messages</summary>
 
-> Stream error
->
-> Reconnecting... 2/5
-> timeout waiting for child process to exit
->
-> Stream error
->
-> Reconnecting... 3/5
-> timeout waiting for child process to exit
->
-> Stream error
->
-> Reconnecting... 4/5
-> timeout waiting for child process to exit
->
-> Stream error
->
-> Reconnecting... 5/5
-> timeout waiting for child process to exit
->
 > 我先把 `vllm-ascend` 的正式仓和对应 tag 拉到本地临时目录，再看它和 vLLM 的版本绑定、模型注册、Ascend attention/KV cache 路径。重点会对照你现在的 `pangu_v2_moe`、PD 分离和 KV 分配问题。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `$base = Join-Path $env:TEMP 'vllm-ascend-analysis'; New-Item -ItemType Directory -Force -Path $base | Out-Null; Set-Location $base; if (!(Test-Path 'vllm-ascend\.git')) { git clone https://github.com/vllm-project/vllm-ascend.git vllm-ascend } else { Set-Location vllm-ascend; git fetch --tags --prune; Set-Location .. }; Set-Location vllm-ascend; git tag --list | Select-String -Pattern '0\.18|v0\.18|0\.18\.0|v0\.18\.0'; git branch -a | Select-String -Pattern '0\.18|v0\.18|release'`
->
-> </details>
 >
 > 第一次 clone 超时了，可能仓比较大或者网络慢。我检查一下目录是否已经部分拉下来了，能继续 fetch 就继续，不能就改用浅克隆 tag。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-ChildItem -Force $env:TEMP\vllm-ascend-analysis; if (Test-Path $env:TEMP\vllm-ascend-analysis\vllm-ascend\.git) { git -C $env:TEMP\vllm-ascend-analysis\vllm-ascend status --short; git -C $env:TEMP\vllm-ascend-analysis\vllm-ascend tag --list | Select-String -Pattern '0\.18|v0\.18|0\.18\.0|v0\.18\.0' }`
-> - Ran `git ls-remote --tags https://github.com/vllm-project/vllm-ascend.git | Select-String -Pattern '0\.18|v0\.18|0\.18\.0|v0\.18\.0'`
-> - Ran `$base = Join-Path $env:TEMP 'vllm-ascend-analysis'; $dst = Join-Path $base 'vllm-ascend-v0.18.0'; if (!(Test-Path (Join-Path $dst '.git'))) { git clone --depth 1 --branch v0.18.0 https://github.com/vllm-project/vllm-ascend.git $dst } else { git -C $dst fetch --tags --prune; git -C $dst checkout v0.18.0 }; git -C $dst rev-parse --short HEAD; git -C $dst status --short`
->
-> </details>
->
 > 浅克隆也超时了，但 tag 能查到，说明网络至少能连。为了不被 git 慢下载卡住，我改用 GitHub 的 tag 压缩包下载；这通常比 clone 快很多。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `$base = Join-Path $env:TEMP 'vllm-ascend-analysis'; New-Item -ItemType Directory -Force -Path $base | Out-Null; $zip = Join-Path $base 'vllm-ascend-v0.18.0.zip'; $out = Join-Path $base 'vllm-ascend-0.18.0-src'; if (!(Test-Path $out)) { if (!(Test-Path $zip)) { Invoke-WebRequest -Uri 'https://github.com/vllm-project/vllm-ascend/archive/refs/tags/v0.18.0.zip' -OutFile $zip -TimeoutSec 120 }; Expand-Archive -Path $zip -DestinationPath $base -Force; $expanded = Join-Path $base 'vllm-ascend-0.18.0'; if (Test-Path $expanded) { Rename-Item -Path $expanded -NewName 'vllm-ascend-0.18.0-src' -Force } }; Get-ChildItem -Force $base; Get-ChildItem -Force $out | Select-Object -First 20`
->
-> </details>
->
 > `vllm-ascend v0.18.0` 源码已经下载到临时目录。我现在看它声明依赖的 vLLM 版本、插件入口、模型支持和 KV cache/PD 代码路径。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `rg --files | rg "(model|registry|pangu|openpangu|kv|cache|attention|worker|platform|connector|pd|disagg|expert|moe|README|install|quickstart|config)"`
-> - Ran `rg -n "vllm==|vllm |vllm-ascend|entry-points|platform_plugins|general_plugins|ModelRegistry|register_model|Pangu|pangu|openpangu|kv_transfer|KV|cache|PD|prefill|decode|disagg|data_parallel|Ascend" -S pyproject.toml README.md docs examples vllm_ascend tests`
-> - Ran `Get-Content -Path pyproject.toml; Get-Content -Path requirements.txt -ErrorAction SilentlyContinue; Get-Content -Path requirements-dev.txt -ErrorAction SilentlyContinue`
->
-> </details>
 >
 > Context compaction
 >
@@ -1154,71 +1106,9 @@ static sink / DSA / SWA 返回什么 KV spec
 >
 > 我已经把 `vllm-ascend` 的 0.18.0 源码包拉到临时目录了；接下来我会把同版本 `vllm` 也取下来，因为 0.18.0 的适配边界主要卡在 vLLM 核心模型/KV cache API 上，而不是 Ascend 插件单边能决定。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `$base='C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis'; Get-ChildItem -Path $base -Force | Select-Object FullName,Length,LastWriteTime`
-> - Ran `rg -n "Pangu|pangu|Mome|MoME|StaticSink|SinkMLA|DSAAttention|ShareKV|PanguV2|model_type" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src"`
-> - Ran `rg -n "vllm.general_plugins|entry-points|register_model|MODELS_CONFIG_MAP|ModelRegistry|kv_cache|Mamba|MLA|mooncake|KVTransfer|kv_connector" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src"`
->
-> </details>
->
 > 从第一轮扫出来的结果看，0.18.0 正式版里确实出现了 `PanguUltraMoE` 的发布记录和量化映射，但还没看到 `pangu_v2_moe` 或 `PanguV2MoEForCausalLM` 的直接模型入口。这一点很关键：它说明可以借官方 0.18.0 底座，但大概率不是“换包即跑”。
 >
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `$ErrorActionPreference='Stop'
-> $base='C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis'
-> $zip=Join-Path $base 'vllm-v0.18.0.zip'
-> $out=Join-Path $base 'vllm-0.18.0-src'
-> if (!(Test-Path $out)) {
->   if (!(Test-Path $zip)) {
->     Invoke-WebRequest -Uri 'https://github.com/vllm-project/vllm/archive/refs/tags/v0.18.0.zip' -OutFile $zip
->   }
->   $extract=Join-Path $base 'vllm-v0.18.0'
->   if (Test-Path $extract) { Remove-Item -LiteralPath $extract -Recurse -Force }
->   Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
->   $inner=Get-ChildItem -LiteralPath $extract | Select-Object -First 1
->   Move-Item -LiteralPath $inner.FullName -Destination $out
-> }
-> Get-ChildItem -Path $base -Force | Select-Object FullName,Length,LastWriteTime`
-> - Ran `rg -n "Pangu|pangu|PanguV2|PanguUltra|pangu_ultra|pangu_v2_moe|Mome|MoME|StaticSink|SinkMLA|DSAAttention|ShareKV|glm_moe_dsa" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\tests"`
-> - Ran `rg -n "Pangu|pangu|PanguV2|PanguUltra|pangu_ultra|pangu_v2_moe|Mome|MoME|StaticSink|SinkMLA|DSAAttention|ShareKV|glm_moe_dsa" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\docs"`
-> - Ran `rg -n "vllm==|torch==|torch-npu|CANN|Python|Requires-Python|transformers|triton-ascend" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\pyproject.toml" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\requirements.txt" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\README.md" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\setup.py"`
->
-> </details>
->
 > 同版本 `vllm` 也已经下载好了。这里有个好消息：vLLM 0.18.0 本体已经包含 `openpangu.py`、`PanguUltraMoEForCausalLM`、`PanguProMoEV2ForCausalLM`、`StaticSinkAttention`，所以适配不是从零写模型；坏消息是它没有 `PanguV2MoEForCausalLM/pangu_v2_moe` 这个名字，仍要处理架构名、KV 规格和 Ascend 后端路径。
->
-> <details><summary>Ran 26 commands</summary>
->
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" | Select-Object -Skip 250 -First 230`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" | Select-Object -Skip 1300 -First 100`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" -TotalCount 220`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" | Select-Object -Skip 540 -First 170`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" | Select-Object -Skip 800 -First 170`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\quantization\modelslim_config.py" | Select-Object -Skip 70 -First 65`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\registry.py" | Select-Object -Skip 160 -First 35`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\transformers_utils\model_arch_config_convertor.py" | Select-Object -Skip 190 -First 80`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\layers\attention\static_sink_attention.py" | Select-Object -Skip 100 -First 110`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\patch\platform\patch_kv_cache_interface.py" -TotalCount 260`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\v1\kv_cache_interface.py" -TotalCount 260`
-> - Ran `rg -n "class .*Spec|page_size_bytes|max_memory_usage_bytes|StaticSink|DSA|mamba_page_size|KVCacheSpec" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\v1" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\patch"`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\layers\attention\static_sink_attention.py" | Select-Object -Skip 185 -First 80`
-> - Ran `rg -n "class Pangu|PanguV2|pangu_v2_moe|Mome|StaticSink|DSAAttention|ShareKVSliding|SinkMLA|ModelRegistry|architectures" "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\vllm_patches\patches\models\pangu_v2_moe" "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\vllm_patches\patches\models\pangu_v2_hybrid"`
-> - Ran `Get-ChildItem -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\vllm_patches\patches\models\pangu_v2_hybrid" -Force | Select-Object Name,Length`
-> - Ran `Get-ChildItem -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\vllm_patches\patches\models\pangu_v2_moe" -Force | Select-Object Name,Length`
-> - Ran `rg -n "pangu_v2_moe|pangu_v2_hybrid|PanguV2MoE|PanguUltra|openpangu" "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\vllm_patches\patches\models" "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\models" "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\model_config"`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\patch\__init__.py" -TotalCount 260`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\__init__.py" -TotalCount 120`
-> - Ran `rg -n "get_attn_backend|MLA|StaticSink|Sink|FlashAttentionDiffKV|attn_backend|model_type.*pangu|pangu_ultra" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\attention" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\platform.py" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\ops"`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\setup.py" | Select-Object -Skip 528 -First 20`
-> - Ran `rg -n "def get_kv_cache_spec|MLAAttentionSpec|MambaSpec|get_attn_backend|MultiHeadLatentAttentionWrapper|class MLAAttention" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\layers\mla.py" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\layers\attention\mla_attention.py"`
-> - Ran `rg -n "MambaStateDtypeCalculator|MambaStateShapeCalculator|mamba_cache|MambaSpec|mamba_page_size" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend"`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\layers\mla.py" | Select-Object -Skip 640 -First 170`
-> - Ran `rg -n "Pangu-Pro-MoE|Pangu Pro|openPangu|PanguUltra|PanguUltraMoE|vllm serve|--model|tensor-parallel|expert-parallel|data-parallel" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\docs\source\tutorials" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\examples"`
-> - Ran `rg -n "disaggregated|Mooncake|kv_connector|kv_role|producer|consumer|prefill|decode|--kv-transfer-config" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\docs\source\tutorials" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\examples\disaggregated_prefill_v1"`
->
-> </details>
 </details>
 
 可以用 `vllm-ascend==0.18.0` 正式版做底座，但不能指望直接把 `omni-npu release_1.2.1` 那套配置平移过去就能跑。核心判断是：vLLM 0.18.0 本体已经有 OpenPangu/Pangu Ultra MoE 支持，但没有你这个 `pangu_v2_moe` / `PanguV2MoEForCausalLM` 的完整入口。
@@ -1312,57 +1202,13 @@ static sink / DSA / SWA 返回什么 KV spec
 
 > 我先跑通4机混布即可，我在该目录下放了一个config.json，你可以看下，如何适配
 
-<details><summary>8 previous messages</summary>
+<details><summary>3 previous messages</summary>
 
 > 我先看你放的 `config.json`，重点确认 `model_type`、`architectures`、MLA/MoE/MoME 相关字段，以及它和 vLLM 0.18.0 现有 OpenPangu 实现能不能直接对上。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Get-ChildItem -Path "C:\Users\李杰\Documents\omni-infer" -Force | Select-Object Name,Length,LastWriteTime`
-> - Ran `rg -n "class OpenPanguModel|def load_weights|packed_modules_mapping|first_k_dense_replace|qk_nope|moe|mome|mamba|num_hidden_layers|architectures|model_type" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py"`
-> - Ran `Get-Content -Path "C:\Users\李杰\Documents\omni-infer\config.json" -Raw`
->
-> </details>
->
 > 这个 `config.json` 比我预想的更“混合”：它不是普通 OpenPangu MoE。它同时有 MLA、DSA 层、SWA 层、static sink、`use_mome: true`、MHC 字段，而且架构名是 `PanguV2aMoEForCausalLM`。这意味着 0.18.0 现有 `openpangu.py` 不能只靠 alias 跑通，会把很多层类型忽略掉。
 >
-> <details><summary>Ran 13 commands</summary>
->
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py" | Select-Object -Skip 160 -First 180`
-> - Ran `rg -n "use_mome|use_mhc|dsa_layers|swa_layers|sliding_window_list|PanguV2a|PanguV2MoE|MomeAttention|StaticSinkMLA|block_post_layernorm|router_sliding_window|param_sink_number" "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu"`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" | Select-Object -Skip 1020 -First 170`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" | Select-Object -Skip 1240 -First 90`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py" | Select-Object -Skip 340 -First 135`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py" | Select-Object -Skip 800 -First 110`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\layers\attention\npu_dsa.py" | Select-Object -Skip 388 -First 95`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\layers\attention\npu_mla.py" | Select-Object -Skip 120 -First 190`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py" -TotalCount 140`
-> - Ran `rg -n "pad_token_id|rope_parameters|_normalize_rope_parameters|class OpenPanguModelBase|packed_modules_mapping|PanguUltraMoEForCausalLM|PanguV2a" "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py"`
-> - Ran `rg -n "PanguUltraMoE|PanguV2a|PanguV2MoE|architectures|model_type|openpangu" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\docs\source\tutorials" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\tests"`
-> - Ran `rg -n "register_model\(|ModelRegistry|_VLLM_MODELS|_TEXT_GENERATION_MODELS|models.registry" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\registry.py" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm"`
-> - Ran `rg -n "--hf-overrides|hf_overrides|architectures" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\engine\arg_utils.py" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\entrypoints"`
->
-> </details>
->
-> 架构名写错了，是PanguV2MoEForCausalLM
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\registry.py" | Select-Object -Skip 880 -First 45`
->
-> </details>
->
 > 收到，架构名按 `PanguV2MoEForCausalLM` 来看。这个修正很关键：它正好对应 omni 里 `pangu_v2_hybrid` patch 提到的名字，但 vLLM 0.18.0 官方本体仍没有注册这个 arch，所以适配点没有消失，只是从“架构名不确定”变成了“确认要补这个 arch”。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `rg -n "def set_default_rope_theta|set_default_rope_theta" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\transformers_utils\config.py" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm"`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\model_executor\models\openpangu.py" | Select-Object -Skip 1140 -First 90`
-> - Ran `rg -n "def get_attn_backend_cls|is_deepseek_mla|get_attn_backend_cls" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\platform.py" "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\v1\attention\selector.py"`
-> - Ran `Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-0.18.0-src\vllm\transformers_utils\config.py" | Select-Object -Skip 350 -First 30
-> Get-Content -Path "C:\Users\李杰\AppData\Local\Temp\vllm-ascend-analysis\vllm-ascend-0.18.0-src\vllm_ascend\platform.py" | Select-Object -Skip 575 -First 42`
->
-> </details>
 </details>
 
 对，按 `PanguV2MoEForCausalLM` 看，这个 config 说明：**不能只给 vLLM 0.18.0 加一个架构 alias 就算适配完成**。
@@ -1444,22 +1290,9 @@ vllm serve /path/to/openpangu-505B \
 
 > 你来帮我实现一下，可以在wsl下D:\workspace\里创一个目录来完成，先请你规划一下你完成的步骤
 
-<details><summary>2 previous messages</summary>
+<details><summary>1 previous message</summary>
 
 > 可以，我先只规划，不动文件。这个适配我会按“先能启动并正确建 KV cache，再谈性能优化”的顺序做，避免一上来把 omni-npu 全量搬过去，后面很难定位问题。
->
-> <details><summary>Plan</summary>
->
-> - [ ] 确认 WSL 与 D 盘工作目录路径，创建独立适配目录
-> - [ ] 下载/准备 vLLM 0.18.0 与 vllm-ascend 0.18.0 源码，并记录基线差异
-> - [ ] 搭建 pangu_v2_moe 适配插件或补丁包，优先减少对上游源码的侵入
-> - [ ] 补齐 PanguV2MoEForCausalLM 注册、pangu_v2_moe MLA 识别和 config 规范化
-> - [ ] 迁移 PanguV2 专用 attention/KV 逻辑：DSA、SWA、SinkMLA、MoME
-> - [ ] 处理 MHC、block_post_layernorm、权重加载与 MTP 层跳过逻辑
-> - [ ] 准备 4 机混布启动脚本和最小验证命令
-> - [ ] 加入 KV cache spec 打印/诊断，验证 OOM 是否来自普通 KV、Sink、DSA 还是 MoME
->
-> </details>
 </details>
 
 可以。我会按下面这条路线做，目标先定为：**4 机混布，单服务跑通模型加载、KV cache 初始化、首 token 推理**，先不做 1P1D 分离和性能极限优化。
@@ -1524,136 +1357,58 @@ vllm serve /path/to/openpangu-505B \
 
 > 现在可以开始动手完成了，要注意运行环境是npu，写代码的过程请认真一点
 
-<details><summary>17 previous messages</summary>
+<details><summary>12 previous messages</summary>
 
 > 开始动手。我会先确认 WSL 可用性和 `/mnt/d/workspace` 映射，然后在独立目录里落地源码和适配包；这一步会尽量保持上游源码干净，把 PanguV2MoE 逻辑放在单独插件里。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `wsl -e bash -lc "set -e; uname -a; pwd; ls -ld /mnt/d /mnt/d/workspace 2>/dev/null || true"`
-> - Ran `Get-ChildItem -Path D:\ -Force | Where-Object { $_.Name -eq 'workspace' } | Select-Object FullName,LastWriteTime`
-> - Ran `Get-Content -Path "C:\Users\李杰\Documents\omni-infer\config.json" -Raw`
->
-> </details>
->
 > WSL 和 `/mnt/d/workspace` 都可用；本地 `config.json` 里架构名仍是旧的 `PanguV2aMoEForCausalLM`，我会在适配目录生成一份修正后的模板，不直接改你原始文件。接下来创建工程目录并把 vLLM/vllm-ascend 0.18.0 源码放进去。
->
-> <details><summary>Ran 5 commands</summary>
->
-> - Ran `wsl -e bash -lc "set -euo pipefail
-> ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018
-> mkdir -p \"$ROOT\"/{src,third_party,configs,scripts,docs}
-> printf '%s\n' \"$ROOT\""`
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; mkdir -p "$ROOT"/{src,third_party,configs,scripts,docs}; printf "%s\n" "$ROOT"'`
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; if [ ! -d "$ROOT/third_party/vllm-ascend-0.18.0" ]; then cp -a /mnt/c/Users/李杰/AppData/Local/Temp/vllm-ascend-analysis/vllm-ascend-0.18.0-src "$ROOT/third_party/vllm-ascend-0.18.0"; fi; find "$ROOT/third_party/vllm-ascend-0.18.0" -maxdepth 1 -type f -name "pyproject.toml" -o -name "setup.py"'`
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; if [ ! -d "$ROOT/third_party/vllm-0.18.0" ]; then cp -a /mnt/c/Users/李杰/AppData/Local/Temp/vllm-ascend-analysis/vllm-0.18.0-src "$ROOT/third_party/vllm-0.18.0"; fi; find "$ROOT/third_party/vllm-0.18.0" -maxdepth 1 -type f -name "pyproject.toml" -o -name "setup.py"'`
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; cp /mnt/c/Users/李杰/Documents/omni-infer/config.json "$ROOT/configs/config.original.json"; ls -la "$ROOT" "$ROOT/configs"'`
->
-> </details>
 >
 > `vllm-ascend` 已复制完成，`vllm` 体积更大，第一次复制超时了；我先检查是否已经完整落下，缺的话继续补齐。之后我会开始写插件骨架和可安装脚本。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `wsl -e bash -lc 'ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; ls -la "$ROOT/third_party"; test -f "$ROOT/third_party/vllm-0.18.0/pyproject.toml" && echo VLLM_OK || echo VLLM_MISSING; du -sh "$ROOT/third_party"/* 2>/dev/null || true'`
-> - Ran `wsl -e bash -lc 'du -sh /mnt/c/Users/李杰/AppData/Local/Temp/vllm-ascend-analysis/vllm-0.18.0-src /mnt/c/Users/李杰/AppData/Local/Temp/vllm-ascend-analysis/vllm-ascend-0.18.0-src'`
->
-> </details>
->
 > 源码完整落下了。现在进入实现阶段：我会先做一个可安装的 `vllm_pangu_v2_moe` 插件，插件启动时负责注册 arch、修 config、patch KV 诊断；模型主体我会先以 vLLM 0.18 的 OpenPangu MoE 为基线扩展，不直接改上游文件。
->
-> <details><summary>Ran 7 commands</summary>
->
-> - Ran `wsl -e bash -lc 'rg -n "class MLAAttention|def __init__|use_sparse|indexer|sink_len|get_kv_cache_spec|sliding_window" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/model_executor/layers/attention/mla_attention.py | head -80'`
-> - Ran `wsl -e bash -lc 'sed -n "34,140p" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/model_executor/layers/mla.py'`
-> - Ran `wsl -e bash -lc 'sed -n "277,380p" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/model_executor/layers/attention/mla_attention.py; sed -n "830,865p" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/model_executor/layers/attention/mla_attention.py'`
-> - Ran `wsl -e bash -lc 'rg -n "class Indexer|index_topk|index_head_dim|use_sparse|AscendSFA|SFA" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-ascend-0.18.0/vllm_ascend | head -120'`
-> - Ran `wsl -e bash -lc 'command -v rg || true; /usr/bin/grep -RInE "class Indexer|index_topk|index_head_dim|use_sparse|AscendSFA|SFA" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-ascend-0.18.0/vllm_ascend | head -120'`
-> - Ran `Get-ChildItem -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm","D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend" -Recurse -File | Select-String -Pattern "class Indexer|index_topk|index_head_dim|use_sparse|AscendSFA|SFA" | Select-Object -First 120 Path,LineNumber,Line`
-> - Ran `Get-ChildItem -Path "C:\Users\李杰\AppData\Local\Temp\omni-npu-release_1.2.1\src\omni_npu" -Recurse -File | Select-String -Pattern "class Indexer|index_topk|index_head_dim" | Select-Object -First 60 Path,LineNumber,Line`
->
-> </details>
 >
 > 我这里看到一个重要取舍：真正完整支持你这个 config 的代码其实已经在 omni 的 `PanguUltraMoEForCausalLM` 里，而 vLLM 0.18 官方 OpenPangu 类缺 DSA/MoME/MHC。为了先跑通 4 机混布，我会做“双路径”插件：优先桥接 omni 的完整模型实现；如果运行环境没有 omni-npu，再退回到 vLLM 官方 OpenPangu 基线并明确告警。这样不会把风险藏起来。
 >
-> <details><summary>Created 6 files, edited 1 file, ran 10 commands</summary>
+> <details><summary>Created 6 files, edited 1 file</summary>
 >
-> - Ran `wsl -e bash -lc 'find /mnt/d/workspace/pangu-v2-moe-vllm-ascend018 -maxdepth 3 -type d | sort'`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/README.md` (+3 -0)
-> - Ran `wsl -e bash -lc 'sed -n "1,120p" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/transformers_utils/model_arch_config_convertor.py; sed -n "400,455p" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/transformers_utils/model_arch_config_convertor.py'`
-> - Ran `wsl -e bash -lc 'grep -n "def is_deepseek_mla" -A35 /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/transformers_utils/model_arch_config_convertor.py'`
-> - Ran `wsl -e bash -lc 'grep -n "is_deepseek_mla" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/transformers_utils/model_arch_config_convertor.py /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/config/model.py | head -40'`
-> - Ran `wsl -e bash -lc 'sed -n "208,238p" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/transformers_utils/model_arch_config_convertor.py'`
-> - Ran `wsl -e bash -lc 'grep -RIn "def initialize_kv_cache" /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-0.18.0/vllm/v1/worker /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/third_party/vllm-ascend-0.18.0/vllm_ascend/worker | head -40'`
-> - Ran `Get-ChildItem -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\v1\worker","D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker" -Recurse -File | Select-String -Pattern "def initialize_kv_cache|initialize_kv_cache" | Select-Object -First 50 Path,LineNumber,Line`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/pyproject.toml` (+17 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/__init__.py` (+4 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/config.py` (+68 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/model.py` (+34 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/plugin.py` (+165 -0)
-> - Ran `Select-String -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\config\model.py" -Pattern "def __post_init__" | Select-Object -First 10`
-> - Ran `Get-Content -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\config\model.py" | Select-Object -Skip 410 -First 18`
-> - Ran `Get-Content -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\config\model.py" | Select-Object -Skip 430 -First 45`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/plugin.py` (+3 -3)
 >
 > </details>
 >
 > 插件骨架已经落下，包含 arch 注册、MLA 识别 patch、量化映射 patch、KV cache 诊断钩子，以及“优先 omni 完整模型、退回 vLLM 基线模型”的选择逻辑。接下来我会补配置规范化脚本和 4 机混布启动脚本。
 >
-> <details><summary>Created 4 files, ran 2 commands</summary>
+> <details><summary>Created 4 files</summary>
 >
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/check_plugin.py` (+15 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/install_editable.sh` (+11 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/normalize_config.py` (+63 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/run_4node_mixed_node.sh` (+77 -0)
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; chmod +x "$ROOT"/scripts/*.sh "$ROOT"/scripts/*.py; python3 "$ROOT/scripts/normalize_config.py" "$ROOT/configs/config.original.json" "$ROOT/configs/config.pangu_v2_moe.normalized.json"; python3 -m json.tool "$ROOT/configs/config.pangu_v2_moe.normalized.json" >/dev/null; head -30 "$ROOT/configs/config.pangu_v2_moe.normalized.json"'`
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; find "$ROOT/src/vllm_pangu_v2_moe" -type f -maxdepth 1 -print -exec python3 -m py_compile {} \;'`
 >
 > </details>
 >
 > 规范化配置已生成，`py_compile` 通过。现在我会用本地源码的 `PYTHONPATH` 做一次轻量导入检查，不依赖 NPU 运行，只确认插件注册逻辑不会在 Python 层直接炸掉。
 >
-> <details><summary>Edited 1 file, ran 4 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; PYTHONPATH="$ROOT/src:$ROOT/third_party/vllm-0.18.0:$ROOT/third_party/vllm-ascend-0.18.0" python3 "$ROOT/scripts/check_plugin.py"'`
-> - Ran `Select-String -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\plugins\*.py","D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\*.py" -Pattern "VLLM_PLUGINS|general_plugins|platform_plugins" | Select-Object -First 80 Path,LineNumber,Line`
-> - Ran `Get-Content -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\plugins\__init__.py" -TotalCount 100`
-> - Ran `Get-Content -Path "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\envs.py" | Select-Object -Skip 856 -First 12`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/run_4node_mixed_node.sh` (+1 -2)
 >
 > </details>
 >
 > 我发现启动脚本里 `VLLM_PLUGINS` 需要同时放入 vllm-ascend 的 general plugins，否则限制插件列表后会把 `ascend_kv_connector/ascend_model_loader` 漏掉；已经修正。现在我会把 omni-npu release_1.2.1 也作为 bridge 源码放进 `third_party`，这样完整 PanguV2MoE 模型路径可以在同一工作目录内启用。
 >
-> <details><summary>Created 3 files, edited 2 files, ran 7 commands</summary>
+> <details><summary>Created 3 files, edited 2 files</summary>
 >
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; if [ ! -d "$ROOT/third_party/omni-npu-release_1.2.1" ]; then cp -a /mnt/c/Users/李杰/AppData/Local/Temp/omni-npu-release_1.2.1 "$ROOT/third_party/omni-npu-release_1.2.1"; fi; test -f "$ROOT/third_party/omni-npu-release_1.2.1/src/omni_npu/v1/models/pangu/pangu_ultra_moe.py"; du -sh "$ROOT/third_party/omni-npu-release_1.2.1"'`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/run_4node_mixed_node.sh` (+4 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/ADAPTATION.md` (+86 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/prepare_model_config.sh` (+24 -0)
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; chmod +x "$ROOT"/scripts/*.sh "$ROOT"/scripts/*.py; bash -n "$ROOT/scripts/install_editable.sh"; bash -n "$ROOT/scripts/run_4node_mixed_node.sh"; bash -n "$ROOT/scripts/prepare_model_config.sh"; python3 -m py_compile "$ROOT/scripts/normalize_config.py" "$ROOT/scripts/check_plugin.py"; find "$ROOT" -maxdepth 2 -type f | sort'`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/install_plugin_only.sh` (+9 -0)
-> - Ran `wsl -e bash -lc 'set -euo pipefail; ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; chmod +x "$ROOT"/scripts/*.sh "$ROOT"/scripts/*.py; bash -n "$ROOT/scripts/install_plugin_only.sh"; grep -n "PanguV2MoEForCausalLM\|rope_parameters\|pad_token_id\|layer_types" "$ROOT/configs/config.pangu_v2_moe.normalized.json" | head -20'`
-> - Ran `wsl -e bash -lc 'ROOT=/mnt/d/workspace/pangu-v2-moe-vllm-ascend018; ls -l "$ROOT/configs/config.pangu_v2_moe.normalized.json"; grep -n "PanguV2MoEForCausalLM" "$ROOT/configs/config.pangu_v2_moe.normalized.json"; grep -n "rope_parameters" "$ROOT/configs/config.pangu_v2_moe.normalized.json"; grep -n "pad_token_id" "$ROOT/configs/config.pangu_v2_moe.normalized.json"; grep -n "layer_types" "$ROOT/configs/config.pangu_v2_moe.normalized.json" | head -1'`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/ADAPTATION.md` (+1 -2)
-> - Ran `Get-ChildItem -Path "D:\workspace\pangu-v2-moe-vllm-ascend018" -Recurse -File | Where-Object { $_.FullName -notmatch '\\third_party\\' } | Select-Object FullName,Length | Format-Table -AutoSize`
-> - Ran `Remove-Item -LiteralPath "D:\workspace\pangu-v2-moe-vllm-ascend018\scripts\__pycache__" -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath "D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe\__pycache__" -Recurse -Force -ErrorAction SilentlyContinue; Get-ChildItem -Path "D:\workspace\pangu-v2-moe-vllm-ascend018" -Recurse -Directory -Filter __pycache__`
-> - Ran `Get-ChildItem -Path "D:\workspace\pangu-v2-moe-vllm-ascend018" -Recurse -Directory -Filter __pycache__ | Remove-Item -Recurse -Force; Get-ChildItem -Path "D:\workspace\pangu-v2-moe-vllm-ascend018" -Recurse -Directory -Filter __pycache__`
->
-> </details>
->
-> <details><summary>Plan</summary>
->
-> 为了先跑通 4 机混布，我把完整 DSA/SWA/SinkMLA/MoME/MHC 路径做成 omni-npu bridge，而不是把 omni-npu 的 NPU kernel 栈全量复制到插件里；fallback 路径只用于导入/基线烟测。
->
-> - [x] 确认 WSL 与 D 盘工作目录路径，创建独立适配目录
-> - [x] 下载/准备 vLLM 0.18.0 与 vllm-ascend 0.18.0 源码，并记录基线差异
-> - [x] 搭建 pangu_v2_moe 适配插件或补丁包，优先减少对上游源码的侵入
-> - [x] 补齐 PanguV2MoEForCausalLM 注册、pangu_v2_moe MLA 识别和 config 规范化
-> - [x] 迁移 PanguV2 专用 attention/KV 逻辑：DSA、SWA、SinkMLA、MoME
-> - [x] 处理 MHC、block_post_layernorm、权重加载与 MTP 层跳过逻辑
-> - [x] 准备 4 机混布启动脚本和最小验证命令
-> - [x] 加入 KV cache spec 打印/诊断，验证 OOM 是否来自普通 KV、Sink、DSA 还是 MoME
 >
 > </details>
 </details>
@@ -1706,7 +1461,7 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 
 > 我使用dp4tp8来部署，并且，你去查看下vllm-ascend的最新官方文档以及一些vllm-ascend最新pr，现在的主流多机混布命令好像不太一样。然后模型架构我的vllm-ascend镜像里是没有omni-npu的，你要把架构写出来，可以参考omni-npu的推理实现
 
-<details><summary>19 previous messages</summary>
+<details><summary>11 previous messages</summary>
 
 > 明白，两个方向我会一起修正：部署形态改成 `DP=4, TP=8` 的 4 机混布；模型实现不能依赖镜像里的 `omni-npu`，我要把 `PanguV2MoEForCausalLM` 代码放进适配包里。先查最新 vllm-ascend 官方多机/混布文档和相关 PR，再回头改脚本和模型实现。
 >
@@ -1733,11 +1488,7 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 >
 > 我先把两件事并行推进：一边核对 vllm-ascend 最新官方多机 DP/TP 启动方式，一边检查现有适配目录，确认哪些文件需要从“桥接 omni-npu”改成“包内自带 PanguV2MoE 实现”。
 >
-> <details><summary>Ran 2 commands, searched web 7 times</summary>
->
-> - Ran `Get-ChildItem -Force D:\workspace\pangu-v2-moe-vllm-ascend018; Get-ChildItem -Force D:\workspace\pangu-v2-moe-vllm-ascend018\src; Get-ChildItem -Force D:\workspace\pangu-v2-moe-vllm-ascend018\scripts; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe\plugin.py; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\scripts\run_4node_mixed_node.sh`
->
-> - Ran `Get-ChildItem -Recurse -Depth 2 D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\omni-npu-release_1.2.1\src\omni_npu\v1\models\pangu | Select-Object FullName; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\pyproject.toml; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\docs\ADAPTATION.md`
+> <details><summary>Searched web 7 times</summary>
 >
 > <details><summary>Searched web 7 times</summary>
 >
@@ -1755,13 +1506,7 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 >
 > 官方文档这边已经确认：0.18.0 的大模型多机场景主推 `mp + DP/TP` 的多进程方式，每台机器都跑 `vllm serve`，非 0 节点用 `--headless`，不是老的 “先起 Ray 集群、只在 head 跑 serve”。我现在开始改脚本和适配包结构，把 PanguV2MoE 的 omni 实现随插件一起带进去。
 >
-> <details><summary>Ran 3 commands, searched web 7 times</summary>
->
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\omni-npu-release_1.2.1\src\omni_npu | Measure-Object | Select-Object Count; Get-ChildItem D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\omni-npu-release_1.2.1\src\omni_npu -Force`
->
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\omni-npu-release_1.2.1\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py -Pattern "class|import|from omni_npu|DSA|SWA|MOME|MHC|dsa|swa|mome|mhc|sink" | Select-Object -First 120`
->
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe\model.py; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe\__init__.py; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe\config.py`
+> <details><summary>Searched web 7 times</summary>
 >
 > <details><summary>Searched web 7 times</summary>
 >
@@ -1779,14 +1524,6 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 >
 > 这里有一个很关键的点：vllm-ascend 官方 0.18.0 release notes 还专门提到 hybrid attention + mamba 在升级后可能因为 block size 被改错导致启动问题，PR #7528 修了“保留 hybrid block size”。你的 PanguV2MoE 也是 hybrid/MoME 路径，所以脚本里我会显式给 `--block-size 128`，并在插件里保留 KV group 诊断，方便确认是不是块大小/混合 KV 规格走错。
 >
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `if (Test-Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu) { Remove-Item -Recurse -Force D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu }
-> Copy-Item -Recurse -Force D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\omni-npu-release_1.2.1\src\omni_npu D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu
-> Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu | Measure-Object | Select-Object Count`
->
-> </details>
->
 > 我现在做的实现取舍是：不是把 omni-npu 当成运行时外部依赖，而是把它的 PanguV2MoE 相关包随这个适配包一起安装。这样镜像里即使没有 `omni_npu`，`PanguV2MoEForCausalLM` 注册时也能落到包内的完整 DSA/SWA/SinkMLA/MoME/MHC 实现。
 >
 > <details><summary>Edited 2 files</summary>
@@ -1795,50 +1532,11 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/plugin.py` (+5 -3)
 >
 > </details>
->
-> Stream error
->
-> Reconnecting... 1/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 2/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 3/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 4/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 5/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> System error
->
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> <details><summary>Plan</summary>
->
-> - [ ] 按最新官方文档调整 4 机 DP4TP8 混布启动方式
-> - [ ] 把 PanguV2MoE 架构实现内置到适配包，不依赖镜像已有 omni-npu
-> - [ ] 修正插件注册，默认使用内置架构实现
-> - [ ] 重新生成配置与文档，说明 DP4TP8 启动和调试参数
-> - [ ] 做静态检查和脚本语法检查
->
-> </details>
 </details>
 
 > 刚刚网络断了，请继续
 
-<details><summary>16 previous messages</summary>
+<details><summary>8 previous messages</summary>
 
 > 网络断线没影响本地改动，我继续接着做。刚才已经把 `omni_npu` 源码拷进适配包，并把插件默认注册改成使用包内的完整 PanguUltraMoE 实现；接下来改 4 机 DP4TP8 的新式启动脚本和文档。
 >
@@ -1851,101 +1549,40 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 >
 > 启动脚本已经从 Ray 版改成了每节点 `vllm serve` 版：4 个 DP rank，每个 rank 本地 TP8，node0 开 API，node1-3 `--headless`。我继续把文档改成这个口径，并把“为什么不用外部 omni-npu”写清楚。
 >
-> <details><summary>Created 2 files, ran 8 commands</summary>
+> <details><summary>Created 2 files</summary>
 >
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/ADAPTATION.md` (+109 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/README.md` (+10 -0)
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\scripts\install_plugin_only.sh; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\scripts\install_editable.sh; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\scripts\check_plugin.py`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\**\*.py -Pattern "OMNI_NPU_PATCHES_DIR|VLLM_PANGU|openpangu|pangu_v2_moe" -List | Select-Object Path,LineNumber,Line`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py -Pattern "dsa_layers|swa_layers|sliding_window|param_sink|use_mome|use_mhc|block_post_layernorm_idx|make_empty_intermediate_tensors|get_seqlen_agnostic_capture_inputs" -Context 2,3`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\__init__.py; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\layers\__init__.py; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\vllm_patches\__init__.py`
-> - Ran `Get-ChildItem D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\config_loader -Force; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\config_loader\loader.py`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py -Pattern "load_model_extra_config|model_extra_config|CUSTOM_MODEL_CONFIG_PATH|enable_prefetch|parall_config|operator_opt_config" -Context 2,2`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\**\*.py -Pattern "load_model_extra_config" -List | Select-Object Path,LineNumber,Line`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\worker\npu_worker.py | Select-Object -First 130`
 >
 > </details>
 >
 > 我发现一个不能忽略的差异：omni 的模型实现读取 `model_extra_config`，原版 omni worker 会在 `init_device()` 里加载这些最佳实践配置；但 vllm-ascend 镜像走的是自己的 worker，不会自动跑 omni 的 worker 初始化。我要在插件里补一个轻量 patch：在 vllm-ascend worker 初始化 NPU 设备时加载 omni 的 `model_extra_config`，否则很多 PanguV2 优化开关会保持默认值。
 >
-> <details><summary>Edited 1 file, ran 8 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend -Filter *.py | Select-String -Pattern "class .*Worker|def init_device|load_model_extra_config|ModelRunner" | Select-Object Path,LineNumber,Line | Select-Object -First 120`
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend -Filter *.py | Select-String -Pattern "initialize_kv_cache|KVCacheConfig|block_size|kv_cache_groups" | Select-Object Path,LineNumber,Line | Select-Object -First 160`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker\worker.py | Select-Object -First 220`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker\worker.py -Pattern "def init_device|init_device" -Context 0,100`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/plugin.py` (+41 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/vllm_pangu_v2_moe/plugin.py` (+6 -1)
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\low_latency\openpangu_v2 | Select-Object FullName; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\low_latency\openpangu_v2\pangu_v2_moe_bf16_a3_xp1d_p.json`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\low_latency\best_practice_configs.json | Select-Object -First 220`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\match_hf_configs.json`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\low_latency\openpangu_v2\pangu_v2_moe_bf16_a3_hybrid.json; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\low_latency\openpangu_v2\pangu_v2_moe_bf16_a3_xp1d_d.json`
 >
 > </details>
 >
 > 我还补了一个 A2/910B 专用的 `CUSTOM_MODEL_CONFIG_PATH` 默认配置。这里沿用 omni 的 hybrid PanguV2 配置，但把预取类开关关掉，避免 910B 上在权重加载后、KV 初始化前后被额外 workspace/预取内存顶爆。
 >
-> <details><summary>Created 1 file, edited 1 file</summary>
+> <details><summary>Created 1 file, edited 2 files</summary>
 >
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/src/omni_npu/model_config/configs/low_latency/openpangu_v2/pangu_v2_moe_bf16_a2_dp4tp8_hybrid.json` (+29 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/run_4node_mixed_node.sh` (+1 -0)
->
-> </details>
->
-> Stream error
->
-> Reconnecting... 1/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> <details><summary>Edited 1 file</summary>
->
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/ADAPTATION.md` (+5 -0)
 >
 > </details>
->
-> Stream error
->
-> Reconnecting... 1/5
-> stream disconnected before completion: Transport error: network error: error decoding response body
->
-> Stream error
->
-> Reconnecting... 2/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 3/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 4/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 5/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> System error
->
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
 </details>
 
 > 刚刚忘了又断了，有未完成的任务请继续
 
-<details><summary>10 previous messages</summary>
+<details><summary>4 previous messages</summary>
 
 > 继续中。现在剩下的是收尾检查：确认脚本语法、Python 语法、打包清单，以及把官方文档/PR 的依据补进最终说明。
 >
-> <details><summary>Edited 2 files, ran 12 commands, searched web 3 times</summary>
->
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018 -Force | Where-Object { $_.Name -eq '__pycache__' } | Select-Object FullName`
->
-> - Ran `python -m compileall -q D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe D:\workspace\pangu-v2-moe-vllm-ascend018\scripts`
->
-> - Ran `bash -n /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/scripts/*.sh`
+> <details><summary>Edited 2 files, searched web 3 times</summary>
 >
 > <details><summary>Searched web 3 times</summary>
 >
@@ -1955,25 +1592,6 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 >
 > </details>
 >
-> - Ran `python -m compileall -q D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu`
->
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe\plugin.py; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\scripts\run_4node_mixed_node.sh; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\pyproject.toml`
->
-> - Ran `python D:\workspace\pangu-v2-moe-vllm-ascend018\scripts\check_plugin.py`
->
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018 -Force | Where-Object { $_.Name -eq '__pycache__' } | Remove-Item -Recurse -Force
-> Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018 -Force | Where-Object { $_.Name -eq '__pycache__' } | Select-Object FullName`
->
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018 -Force | Where-Object { -not $_.PSIsContainer } | Select-Object FullName,Length | Sort-Object FullName | Select-Object -First 80`
->
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu -File | Where-Object { $_.Extension -notin '.py','.json','.yaml','.yml','.txt' } | Select-Object FullName,Extension | Sort-Object FullName`
->
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\configs\config.pangu_v2_moe.normalized.json | Select-Object -First 60`
->
-> - Ran `$url='https://docs.vllm.ai/projects/ascend/en/v0.18.0/tutorials/models/Qwen3.5-397B-A17B.html'; try { (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20).Content | Select-String -Pattern 'data-parallel-size|headless|api-server-count|Qwen3.5' -Context 2,2 | Select-Object -First 80 } catch { $_.Exception.Message }`
->
-> - Ran `$url='https://github.com/vllm-project/vllm-ascend/releases/tag/v0.18.0'; try { $c=(Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20).Content; $c | Select-String -Pattern 'hybrid|block|7528|release|0.18.0' -Context 1,1 | Select-Object -First 40 } catch { $_.Exception.Message }`
->
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/run_4node_mixed_node.sh` (+1 -0)
 >
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/ADAPTATION.md` (+1 -0)
@@ -1982,54 +1600,12 @@ bash scripts/prepare_model_config.sh /path/to/openpangu-505B
 >
 > 我把 `--distributed-executor-backend mp` 也显式加回去了，这和官方 0.18.0 的多机 MP 示例一致。现在再跑一遍语法检查，然后我给你一版可以直接照着试的说明。
 >
-> <details><summary>Edited 2 files, ran 5 commands</summary>
+> <details><summary>Edited 2 files</summary>
 >
-> - Ran `bash -n /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/scripts/*.sh`
-> - Ran `python -m compileall -q D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu D:\workspace\pangu-v2-moe-vllm-ascend018\scripts`
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018 -Force | Where-Object { $_.Name -eq '__pycache__' } | Remove-Item -Recurse -Force`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\**\*.py -Pattern "disable_hybrid_kv_cache_manager|hybrid-kv-cache" | Select-Object Path,LineNumber,Line | Select-Object -First 40`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\engine\arg_utils.py | Select-Object -Index 1208..1228; Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\config\scheduler.py | Select-Object -First 145`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/scripts/run_4node_mixed_node.sh` (+4 -0)
-> - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/ADAPTATION.md` (+4 -2)
->
-> </details>
->
-> Stream error
->
-> Reconnecting... 1/5
-> stream disconnected before completion: Transport error: network error: error decoding response body
->
-> <details><summary>Edited 1 file, ran 3 commands</summary>
->
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/ADAPTATION.md` (+2 -0)
-> - Ran `bash -n /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/scripts/*.sh`
-> - Ran `python -m compileall -q D:\workspace\pangu-v2-moe-vllm-ascend018\src\vllm_pangu_v2_moe D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu D:\workspace\pangu-v2-moe-vllm-ascend018\scripts`
-> - Ran `Get-ChildItem -Recurse D:\workspace\pangu-v2-moe-vllm-ascend018 -Force | Where-Object { $_.Name -eq '__pycache__' } | Remove-Item -Recurse -Force`
 >
 > </details>
->
-> 已继续完成，适配目录在：
->
-> [D:\workspace\pangu-v2-moe-vllm-ascend018](</D:/workspace/pangu-v2-moe-vllm-ascend018>)
->
-> 我做了这些关键改动：
->
-> - 把 `omni_npu` 的 PanguV2MoE 推理实现直接打进适配包：`src/
->
-> Stream error
->
-> Reconnecting... 1/5
-> stream disconnected before completion: Transport error: network error: error decoding response body
->
-> Stream error
->
-> Reconnecting... 2/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
->
-> Stream error
->
-> Reconnecting... 3/5
-> stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)
 </details>
 
 已继续完成，核心代码在 `D:\workspace\pangu-v2-moe-vllm-ascend018`。
@@ -2097,35 +1673,22 @@ python -m compileall src scripts           通过
 
 > 再给我写一个中文文档，并且讲一下运行该模型是vllm的启动逻辑
 
-<details><summary>6 previous messages</summary>
+<details><summary>5 previous messages</summary>
 
 > 我来补一份中文文档，重点写成“怎么部署”和“vLLM 从命令到模型/KV 初始化的启动链路”两部分，方便你后面排 OOM 时按阶段对照日志。
 >
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\docs\ADAPTATION.md`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\**\*.py,D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\**\*.py -Pattern "def serve|class ModelConfig|register_general_plugins|general_plugins|ModelRegistry|initialize_kv_cache|determine_available_memory|init_device|load_model" | Select-Object Path,LineNumber,Line | Select-Object -First 160`
->
-> </details>
->
 > 我已经定位了 vLLM 插件加载、ModelConfig、vllm-ascend worker、ModelRunner/KV cache 几个关键源码点。现在直接新增一份中文文档，不改现有英文文档。
 >
-> <details><summary>Created 1 file, ran 3 commands</summary>
+> <details><summary>Created 1 file</summary>
 >
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker\model_runner_v1.py | Select-Object -Skip 2540 -First 130`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker\worker.py | Select-Object -Skip 240 -First 130`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\plugins\__init__.py`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/PANGU_V2_MOE_CN.md` (+381 -0)
 >
 > </details>
 >
 > 中文文档已写好。我再快速检查一下文档和脚本，避免 Markdown 里命令或文件路径有明显笔误。
 >
-> <details><summary>Edited 1 file, ran 3 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\docs\PANGU_V2_MOE_CN.md | Select-Object -First 80`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\docs\PANGU_V2_MOE_CN.md -Pattern "PanguV2a|PanguV2MoE|hybrid|KV cache|vllm serve|CUSTOM_MODEL_CONFIG_PATH" | Select-Object -First 60`
-> - Ran `bash -n /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/scripts/*.sh`
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/README.md` (+1 -0)
 >
 > </details>
@@ -2145,7 +1708,7 @@ python -m compileall src scripts           通过
 
 > vllm-ascend:v0.9.1-dev适配过openPangu-Ultra-MoE-718B，当然他和我们的模型完全不一样，看一下之前是怎么适配的，参考下相关pr
 
-<details><summary>10 previous messages</summary>
+<details><summary>8 previous messages</summary>
 
 > 我去查 vllm-ascend 早期 `v0.9.1-dev` 里 OpenPangu-Ultra-MoE-718B 的适配脉络，重点看：模型注册、Ascend patch、KV/hybrid cache、权重加载和启动参数。然后我把和我们 PanguV2MoE 505B 可复用、不可复用的部分拆出来。
 >
@@ -2162,13 +1725,7 @@ python -m compileall src scripts           通过
 >
 > 我找到了 718B 官方部署文档和相关代码线索：那个版本已经走了 `vllm serve + data-parallel-size-local + headless` 这种多机 DP/TP 启动方式，而且模型类型是 `pangu_ultra_moe`。我继续从 GitHub commit/PR 里追它当时进 vLLM/vllm-ascend 的改动点。
 >
-> <details><summary>Ran 3 commands, searched web 13 times</summary>
->
-> - Ran `git ls-remote --tags https://github.com/vllm-project/vllm-ascend.git | Select-String -Pattern "v0.9.1|0.9"`
->
-> - Ran `git ls-remote https://github.com/vllm-project/vllm-ascend.git refs/heads/main refs/heads/* | Select-String -Pattern "pangu|0.9|dev"`
->
-> - Ran `git ls-remote --tags https://github.com/vllm-project/vllm.git | Select-String -Pattern "v0.9|v0.10|v0.12|v0.14" | Select-Object -First 80`
+> <details><summary>Searched web 13 times</summary>
 >
 > <details><summary>Searched web 13 times</summary>
 >
@@ -2192,35 +1749,14 @@ python -m compileall src scripts           通过
 >
 > PR 线索已经比较清楚：vLLM 主仓先通过 #27521 加原生 `openpangu.py` / `openpangu_mtp.py`，后面 #28775 继续补 openPangu MoE；vllm-ascend #4615 主要不是重写模型，而是补 Ascend 量化映射和 MTP proposer。现在我再拉一下 patch diff，确认具体文件级改动。
 >
-> <details><summary>Ran 7 commands</summary>
->
-> - Ran `$urls=@('https://patch-diff.githubusercontent.com/raw/vllm-project/vllm/pull/27521.patch','https://patch-diff.githubusercontent.com/raw/vllm-project/vllm/pull/28775.patch','https://patch-diff.githubusercontent.com/raw/vllm-project/vllm-ascend/pull/4615.patch'); foreach($u in $urls){ Write-Output "URL $u"; try { (Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 30).Content | Select-String -Pattern '^diff --git|^Subject:|^\+class|^\+.*Pangu|^\+.*pangu|^\+.*ModelRegistry|^\+.*packed|^\+.*MTP|^\+.*fused_qkv' | Select-Object -First 120 } catch { Write-Output $_.Exception.Message } }`
-> - Ran `$raw='https://huggingface.co/openpangu/openPangu-Ultra-MoE-718B-model/raw/main/inference/vllm_ascend/models/open_pangu.py'; try { $c=(Invoke-WebRequest -Uri $raw -UseBasicParsing -TimeoutSec 30).Content; $c | Select-String -Pattern 'class OpenPanguMoE|class OpenPanguMLAAttention|class OpenPanguDecoderLayer|class OpenPanguForCausalLM|class PanguUltraMoEForCausalLM|def load_weights|def load_expert_weight|def load_attn_mlp_weight|enable_force_load_balance|AscendFusedMoE' -Context 1,2 | Select-Object -First 120 } catch { Write-Output $_.Exception.Message }`
-> - Ran `$dir='D:\workspace\pangu-v2-moe-vllm-ascend018\tmp_prs'; New-Item -ItemType Directory -Force $dir | Out-Null; $prs=@{ 'vllm_27521.patch'='https://patch-diff.githubusercontent.com/raw/vllm-project/vllm/pull/27521.patch'; 'vllm_28775.patch'='https://patch-diff.githubusercontent.com/raw/vllm-project/vllm/pull/28775.patch'; 'ascend_4615.patch'='https://patch-diff.githubusercontent.com/raw/vllm-project/vllm-ascend/pull/4615.patch'}; foreach($k in $prs.Keys){ try { Invoke-WebRequest -Uri $prs[$k] -UseBasicParsing -TimeoutSec 60 -OutFile (Join-Path $dir $k); Write-Output "saved $k" } catch { Write-Output "fail $k $($_.Exception.Message)" } }; Get-ChildItem $dir | Select-Object Name,Length`
-> - Ran `$raw='https://huggingface.co/openpangu/openPangu-Ultra-MoE-718B-model/raw/main/doc/vllm_ascend_for_openpangu_ultra_moe_718b.md'; try { (Invoke-WebRequest -Uri $raw -UseBasicParsing -TimeoutSec 60).Content | Select-String -Pattern 'vllm-ascend|data-parallel|headless|tensor-parallel|OpenPangu|718B|block-size|hybrid|VLLM|quantization' -Context 1,1 | Select-Object -First 120 } catch { Write-Output $_.Exception.Message }`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\tmp_prs\vllm_27521.patch -Pattern '^diff --git|^Subject:|openpangu|Pangu|ModelRegistry|architectures|mtp|MTP|packed_modules|pangu' | Select-Object -First 200`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\tmp_prs\ascend_4615.patch`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\tmp_prs\vllm_28775.patch -Pattern '^diff --git|^Subject:|openpangu|Pangu|ModelRegistry|architectures|mtp|MTP|packed_modules|pangu' | Select-Object -First 220`
->
-> </details>
->
 > 结论方向已经出来：718B 的适配是“两段式”的，先把通用 OpenPangu 模型/MTP 放进 vLLM 主仓，再在 vllm-ascend 侧补 Ascend 量化 mapping 和 MTP proposer；模型仓里还提供了一份覆盖 vllm_ascend 的 NPU 专用实现。这个思路和我们现在“插件注册 + 包内模型实现 + Ascend worker/config patch”的路线是同一类，只是 505B PanguV2MoE 的 DSA/SWA/MoME/MHC 更复杂。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\model_executor\models\openpangu.py -Pattern "PanguProMoEV2ForCausalLM|OpenPanguSinkAttention|Static|Diffkv|param_sink|packed_modules_mapping|fused_qkv_a_proj|get_seqlen_agnostic_capture_inputs|PanguUltraMoEForCausalLM|class OpenPanguMoE" -Context 1,2`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\v1\models\pangu\pangu_ultra_moe.py -Pattern "PanguProMoEV2ForCausalLM|OpenPanguSinkAttention|NPUDeepseekSparseAttention|NPUDeepseekMLAAttention|MomeSpec|IsHybrid|param_sink|dsa_layers|use_mome|get_seqlen_agnostic_capture_inputs|class PanguUltraMoEForCausalLM|packed_modules_mapping|fused_qkv_a_proj" -Context 1,2`
->
-> </details>
 >
 > 我会把这次追 PR 的结果落一份参考文档，后面你对照我们当前适配时不用再翻 PR。文档会明确：718B 那套哪些可以借鉴，哪些不能直接套到 505B PanguV2MoE。
 >
-> <details><summary>Created 1 file, edited 1 file, ran 2 commands</summary>
+> <details><summary>Created 1 file, edited 1 file</summary>
 >
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/OPENPANGU_ULTRA_718B_REFERENCE_CN.md` (+228 -0)
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/README.md` (+1 -0)
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\docs\OPENPANGU_ULTRA_718B_REFERENCE_CN.md | Select-Object -First 80; Get-ChildItem D:\workspace\pangu-v2-moe-vllm-ascend018\tmp_prs | Select-Object Name,Length`
-> - Ran `Remove-Item -Recurse -Force D:\workspace\pangu-v2-moe-vllm-ascend018\tmp_prs`
 >
 > </details>
 </details>
@@ -2260,11 +1796,9 @@ python -m compileall src scripts           通过
 >
 > 源码/patch 方案文档已经写好，我把 README 也加上入口，再做一次简单检查。
 >
-> <details><summary>Edited 1 file, ran 2 commands</summary>
+> <details><summary>Edited 1 file</summary>
 >
 > - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/README.md` (+1 -0)
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\docs\SOURCE_PATCH_ADAPTATION_CN.md -Pattern "步骤|PanguV2MoEForCausalLM|pangu_v2_moe|vllm-ascend|KV|CUSTOM_MODEL_CONFIG_PATH|git apply" | Select-Object -First 80`
-> - Ran `Get-Content D:\workspace\pangu-v2-moe-vllm-ascend018\README.md`
 >
 > </details>
 </details>
@@ -2294,27 +1828,11 @@ python -m compileall src scripts           通过
 
 > 这里的步骤和你之前的适配工程一致吗，请仔细检查一下，另外源码/patch 方式文档里的修改点请把具体要在源码哪几行修改都写清楚，并把修改的代码写完整。
 
-<details><summary>11 previous messages</summary>
+<details><summary>7 previous messages</summary>
 
 > 我会按当前适配工程逐项对照源码方式文档：先确认插件方案实际做了哪些 runtime patch，再在 vLLM/vllm-ascend 0.18.0 源码里定位对应文件和行号，然后把文档改成“在哪一行附近改、替换/新增什么完整代码”。
 >
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\transformers_utils\model_arch_config_convertor.py -Pattern "is_deepseek_mla|deepseek|kv_lora_rank|model_type" -Context 3,8`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\model_executor\models\registry.py -Pattern "_VLLM_MODELS|PanguUltra|ModelRegistry|register_model|PanguEmbedded" -Context 3,6`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\config\model.py -Pattern "class ModelConfig|def __post_init__|hf_config|architectures|rope_parameters|pad_token_id" -Context 2,6`
->
-> </details>
->
 > 我已经发现一个需要修正的点：源码文档和插件工程在“模型实现放哪里”这件事上表述不够一致。插件工程是把 `omni_npu` 随包带入并用 registry 注册到它；源码方式如果要完全一致，也应该优先把 `omni_npu` 放进环境，再用一个很薄的 vLLM 模型入口文件转发到 omni 实现，而不是建议大段手工迁移模型代码。接下来我会按这个方向重写具体修改点。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\quantization\quant_config.py -Pattern "pangu|packed|fused_qkv_a_proj|gate_up_proj|pangu_ultra" -Context 2,6`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\quantization\modelslim_config.py -Pattern "packed_modules_model_mapping|deepseek|pangu|fused_qkv_a_proj|gate_up_proj" -Context 2,6`
-> - Ran `Select-String -Path D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker\worker.py -Pattern "def _init_device|def init_device|self.model_runner|init_workspace_manager|set_random_seed|init_device_properties_triton" -Context 3,8`
->
-> </details>
 >
 > Context compaction
 >
@@ -2322,15 +1840,6 @@ python -m compileall src scripts           通过
 > Status: completed
 >
 > 我继续把这份“源码/patch 方式”文档对齐到我们已经做出来的适配工程。刚才检查到一个关键点：之前文档里把“迁移模型实现到 vLLM”说得太宽了，和当前工程的实际做法不完全一致，应该明确成“vLLM 只加薄入口，真实实现复用/引入 omni_npu”。
->
-> <details><summary>Ran 4 commands</summary>
->
-> - Ran `Select-String -Path 'D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker\model_runner_v1.py' -Pattern 'def initialize_kv_cache|kv_cache_groups|self.kv_cache_config|deepcopy\(kv_cache_config\)|logger' -Context 2,8`
-> - Ran `Get-Content -Path 'D:\workspace\pangu-v2-moe-vllm-ascend018\docs\SOURCE_PATCH_ADAPTATION_CN.md' -Raw`
-> - Ran `Select-String -Path 'D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\model_executor\models\registry.py' -Pattern 'PanguEmbeddedForCausalLM|PanguProMoEV2ForCausalLM|PanguUltraMoEForCausalLM|_VLLM_MODELS|ModelRegistry\(' -Context 2,6`
-> - Ran `Select-String -Path 'D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\config\model.py','D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-0.18.0\vllm\transformers_utils\model_arch_config_convertor.py','D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\quantization\modelslim_config.py','D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend\worker\worker.py' -Pattern 'def __post_init__|hf_config = get_config|self.hf_config = hf_config|self.hf_text_config = get_hf_text_config|def is_deepseek_mla|pangu_ultra_moe|packed_modules_model_mapping|def init_device|self.device = self._init_device|init_workspace_manager' -Context 2,6`
->
-> </details>
 >
 > 我会直接重写这份文档，而不是在旧文档上小修小补：这样可以把“插件工程做法”和“源码/patch 做法”一一对齐，并把每个修改点固定到当前下载的 vLLM/vllm-ascend 0.18.0 源码位置。
 >
@@ -2341,14 +1850,6 @@ python -m compileall src scripts           通过
 > </details>
 >
 > 文档已经重写完成，现在我做一轮核对：重点看它是否包含当前工程的真实做法、每个源码文件的具体位置、完整代码块，以及启动命令是否仍是 DP4TP8 的 4 机混布方案。
->
-> <details><summary>Ran 3 commands</summary>
->
-> - Ran `Select-String -Path 'D:\workspace\pangu-v2-moe-vllm-ascend018\docs\SOURCE_PATCH_ADAPTATION_CN.md' -Pattern '与当前适配工程是否一致|PanguV2MoEForCausalLM|vllm/model_executor/models/pangu_v2_moe.py|registry.py|model.py|model_arch_config_convertor.py|modelslim_config.py|worker.py|model_runner_v1.py|DP4TP8|--headless|load_model_extra_config'`
-> - Ran `git -C 'D:\workspace\pangu-v2-moe-vllm-ascend018' diff -- docs/SOURCE_PATCH_ADAPTATION_CN.md`
-> - Ran `Get-Content -Path 'D:\workspace\pangu-v2-moe-vllm-ascend018\docs\SOURCE_PATCH_ADAPTATION_CN.md' -TotalCount 60`
->
-> </details>
 </details>
 
 已仔细检查并重写了源码/patch 方式文档，文件在：
@@ -2376,16 +1877,9 @@ python -m compileall src scripts           通过
 
 > 有没有什么执行过程中可能遇到的算子问题？
 
-<details><summary>3 previous messages</summary>
+<details><summary>2 previous messages</summary>
 
 > 我先按当前适配路径把可能触发的 NPU 算子点梳理一下，重点会看 omni-npu 的 PanguV2/Ultra MoE 实现里用了哪些自定义/融合算子，以及哪些开关在 910B 上最容易踩坑。
->
-> <details><summary>Ran 2 commands</summary>
->
-> - Ran `rg -n "torch_npu|npu_|Ascend|Fused|fused|moe|topk|top_k|dispatch|combine|MLA|MambaSpec|KVCache|Moe|Expert|custom" "D:\workspace\pangu-v2-moe-vllm-ascend018\third_party\vllm-ascend-0.18.0\vllm_ascend"`
-> - Ran `rg -n "torch_npu|npu_|npu\.|custom|moe|MHC|mome|prefetch|fusion|fused|topk|top_k|dispatch|combine|MLA|Deepseek|Sparse|MambaSpec|MomeSpec|load_model_extra_config|model_extra_config" "D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu"`
->
-> </details>
 >
 > 我看到风险主要集中在四类：attention/MLA 融合算子、MoE dispatch/combine 通信算子、MoME/MHC/DSA 相关自定义算子，以及采样/rope/KV 更新这类小融合算子。下面我按“最可能先遇到”的顺序讲。
 </details>
@@ -2520,3 +2014,871 @@ extra config 里先这样：
    ```
 
 整体判断：这个模型第一阶段最容易卡的不是普通 matmul，而是 **MLA attention shape、MoE 通信、MoME/hybrid KV spec、自定义算子加载** 这四块。先把这些路径保守化，跑过 KV cache 初始化和第一条 decode，再逐项开性能优化。
+
+> omni-npu中配套的vllm版本是0.14.0，而我要适配的是0.18.0，模型部分的代码中很多导入的包或类的位置或者名字发生了变化，请帮我检查一下omni的模型部分要做哪些修改，并且看看0.14.0-0.18.0还会出现其他的哪些可能问题
+
+<details><summary>9 previous messages</summary>
+
+> 我先做静态兼容性检查：把 omni-npu 里 Pangu 模型路径及其直接依赖的 vLLM 导入全部扫出来，再对照本地 vLLM 0.18.0 源码确认哪些模块/类已经移动或改名。这个比凭记忆猜 API 稳得多。
+>
+> 导入面比只看 `pangu_ultra_moe.py` 更大：它会带出 `NPUDeepseekMLAAttention`、DSA、MHC、vocab embedding、FusedMLP、attention backend。现在我会用脚本把这些文件中的 vLLM 符号逐个对照 0.18.0 源码做一次“存在性”检查。
+>
+> Context compaction
+>
+> Source: automatic
+> Status: completed
+>
+> 我继续接着查 0.14 到 0.18 的接口漂移点。重点会放在 omni 里真正会 import / instantiate 的模型层、attention backend、KV spec 这些位置，因为这些最容易在启动后才炸。
+>
+> 已经能确认几个不是“改个 import 就完事”的点：`MLAAttention/MLACommon*` 位置变化比较直接；但 `MomeSpec/MomeAttention/StaticSinkMLAAttention` 属于 omni 当年打进 vLLM 的扩展，0.18 本体没有，需要按补丁逻辑迁移。接下来我把这些点落成一份对照文档，方便你后面逐项改源码或 patch。
+>
+> 我准备新增一份兼容性检查文档，里面会把“必须改的 import / 类名变化”和“不是 import 问题、而是 0.18 运行时语义变化”的点分开。这样你后续在镜像里改源码时，不会把 KV/MoME 这类深水区误判成普通包路径问题。
+>
+> <details><summary>Created 1 file</summary>
+>
+> - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/docs/OMNI_NPU_VLLM_014_TO_018_COMPAT_CN.md` (+442 -0)
+>
+> </details>
+>
+> 文档已经写好一版。现在我再把 README 的文档索引补一下，并做一次快速检索，确认关键点都在文档里。
+>
+> <details><summary>Edited 1 file</summary>
+>
+> - Wrote `D:/workspace/pangu-v2-moe-vllm-ascend018/README.md` (+2 -0)
+>
+> </details>
+</details>
+
+我已经把 0.14.0 -> 0.18.0 的模型兼容性检查整理成中文文档：
+
+[OMNI_NPU_VLLM_014_TO_018_COMPAT_CN.md](D:/workspace/pangu-v2-moe-vllm-ascend018/docs/OMNI_NPU_VLLM_014_TO_018_COMPAT_CN.md)
+
+也在 [README.md](D:/workspace/pangu-v2-moe-vllm-ascend018/README.md:11) 里加了索引。
+
+核心结论是：这次不只是改 import。简单必须改的包括：
+
+- `vllm.attention.layer.MLAAttention` -> `vllm.model_executor.layers.attention.mla_attention.MLAAttention`
+- `vllm.v1.attention.backends.mla.common.MLACommon*` -> `vllm.model_executor.layers.attention.mla_attention`
+- `MLACommonBaseImpl` 在 0.18.0 里应对应 `MLACommonImpl`
+- `get_rope_wrapper` 在 0.18.0 不存在，如果 config 触发 MROPE 分支，需要单独迁移
+- `StaticSinkMLAAttention` 在 0.18.0 本体不存在，首轮应保持 `param_sink_number=0`
+
+更关键的是，`pangu_v2_moe` 依赖的 `MomeSpec`、`MomeAttention`、`AggregateConv`、hybrid KV manager 不是 vLLM 0.18.0 原生能力，而是 omni 0.14 配套 patch 注入的能力。当前适配工程虽然已经做了模型注册、config normalization、extra config loader、vllm-ascend packed mapping，但还没有完整迁移 `pangu_v2_hybrid` 这组 MoME/KV patch。
+
+所以你遇到的“模型加载完后、KV cache 分配阶段 OOM，调小序列/max-num-seqs/gpu-memory-utilization 或增加 D 节点仍然 OOM”，我现在更倾向于判断是 **MoME/hybrid KV spec/page size/grouping 在 0.18.0 下没有按 omni 语义生效**，而不是请求长度导致的常规 KV cache 不够。
+
+另外我查了一下，这个目录不是 git repo，`git status` 无法跑；本次只改了文档和 README，没有动模型代码。
+
+> pangu_v2_hybrid
+
+> 请你详细的说明我要如何做，第一阶段要能成功加载权重，第二阶段是不开图模式和prefix caching时能够成功拉起服务，请一步步指点
+
+<details><summary>2 previous messages</summary>
+
+> 我先按你说的两个阶段来收束：第一阶段只追求“模型类可导入、config 能识别、权重能加载完”；第二阶段再把 MoME/hybrid KV 的运行时补齐到可以不开图、不启 prefix caching 拉起服务。为了避免泛泛说，我会对照当前工程里已经做过的适配和 omni 的 `pangu_v2_hybrid` patch 逐步拆。
+>
+> 我看到 `pangu_v2_hybrid` 的 patch 目录里确实是一整组：KV interface、KV utils、single type manager、MoME、static sink、model config 等。你这个目标要拆阶段做，第一阶段最好不要一次性把所有 hybrid patch 打开，否则很难分辨是权重映射、模型构造、KV spec 还是 graph/capture 出的问题。
+</details>
+
+下面我建议按“两阶段、每阶段只解一个问题”的方式做。`pangu_v2_hybrid` 不是一个单独模型类，它本质上是 **Pangu V2 MoE 的 hybrid KV/MoME 运行时补丁集合**。第一阶段先不要追求服务能起来，只追求模型导入、模型构造、权重映射和权重加载完成；第二阶段再让 KV cache 初始化、不开图模式、不开 prefix caching 的服务能起来。
+
+**总原则**
+
+不要第一步就把 omni 的所有 patch 一股脑搬到 vLLM 0.18.0 里。你要按这个顺序切：
+
+1. 先让 Python import 不炸。
+2. 再让 `PanguV2MoEForCausalLM` 注册成功。
+3. 再让模型结构能实例化。
+4. 再让权重能完整加载。
+5. 最后才处理 `MomeSpec` / hybrid KV cache / MoME attention backend。
+
+---
+
+**第一阶段：成功加载权重**
+
+目标：启动后日志至少走到 “model weights loaded / loading weights finished” 这一类位置。即使随后 KV cache 初始化 OOM，也算第一阶段通过。
+
+1. 确认 `config.json`
+
+模型目录的 `config.json` 至少要是：
+
+```json
+{
+  "model_type": "pangu_v2_moe",
+  "architectures": ["PanguV2MoEForCausalLM"]
+}
+```
+
+如果里面还是错的架构名，例如 `PanguV2aMoEForCausalLM`，先修正。你当前工程里已有脚本：
+
+```bash
+bash /mnt/d/workspace/pangu-v2-moe-vllm-ascend018/scripts/prepare_model_config.sh /path/to/model
+```
+
+2. 先改 vLLM 0.18.0 下已经变化的 import
+
+这些是硬阻塞，不改会在模型导入阶段直接失败。
+
+`omni_npu/v1/layers/attention/npu_mla.py` 和 `npu_dsa.py`：
+
+```python
+from vllm.model_executor.layers.attention.mla_attention import MLAAttention
+```
+
+替换旧的：
+
+```python
+from vllm.attention.layer import MLAAttention
+```
+
+`omni_npu/attention/backends/mla.py`、`dsa.py`：
+
+```python
+from vllm.model_executor.layers.attention.mla_attention import (
+    MLACommonBackend,
+    MLACommonImpl as MLACommonBaseImpl,
+    MLACommonDecodeMetadata,
+    MLACommonMetadata,
+    MLACommonMetadataBuilder,
+    MLACommonPrefillMetadata,
+    QueryLenSupport,
+)
+```
+
+`omni_npu/v1/layers/attention/npu_pangu.py`：
+
+```python
+from vllm.model_executor.layers.attention.mla_attention import MLACommonMetadata
+```
+
+3. 第一阶段先关闭 static sink
+
+因为 vLLM 0.18.0 本体没有 `StaticSinkMLAAttention`。先确保模型 config 或运行时 normalize 后：
+
+```json
+"param_sink_number": 0
+```
+
+否则会走：
+
+```python
+self.attn = StaticSinkMLAAttention(...)
+```
+
+然后在模型构造阶段失败。
+
+4. 处理 `MomeAttention` 的导入
+
+如果你的模型 `config.json` 里 `use_mome=true`，那么 `npu_mla.py` / `npu_dsa.py` 构造时会用：
+
+```python
+from vllm.model_executor.layers.npumome import MomeAttention
+```
+
+vLLM 0.18.0 没有这个模块。第一阶段建议先用最小方式让 import 成功：把 omni 的 `MomeAttention` 暴露到 vLLM 期望路径。
+
+源码方式可以新增：
+
+`vllm/model_executor/layers/npumome.py`
+
+```python
+from omni_npu.layers.attention.npu_sparse_attentions import MomeAttention
+
+__all__ = ["MomeAttention"]
+```
+
+如果你第一阶段不想处理 MoME，也可以临时把模型 config 里的：
+
+```json
+"use_mome": false
+```
+
+但我不太推荐，因为这可能导致权重结构和真实模型不一致，后面还要回滚。更稳的是让 `MomeAttention` import 路径存在。
+
+5. 补模型 hybrid 接口
+
+`PanguUltraMoEForCausalLM` 继承了 `IsHybrid`。vLLM 0.18.0 的 runner 会找：
+
+```python
+get_mamba_state_copy_func()
+```
+
+所以在 `omni_npu/v1/models/pangu/pangu_ultra_moe.py` 的 import 里补：
+
+```python
+from vllm.model_executor.layers.mamba.mamba_utils import (
+    MambaStateCopyFunc,
+    MambaStateCopyFuncCalculator,
+    MambaStateDtypeCalculator,
+    MambaStateShapeCalculator,
+)
+```
+
+然后在 `PanguUltraMoEForCausalLM` 类里加：
+
+```python
+@classmethod
+def get_mamba_state_copy_func(cls) -> tuple[MambaStateCopyFunc, ...]:
+    return MambaStateCopyFuncCalculator.linear_attention_state_copy_func()
+```
+
+第一阶段 prefix caching 和 speculative decoding 都不开，所以这里主要是满足 vLLM 0.18.0 接口，不要让初始化期 `AttributeError`。
+
+6. 确保权重 packed mapping
+
+vllm-ascend 里要有 `pangu_v2_moe` 的 packed mapping：
+
+```python
+packed_modules_model_mapping["pangu_v2_moe"] = {
+    "gate_up_proj": ["gate_proj", "up_proj"],
+    "experts": [
+        "experts.0.gate_proj",
+        "experts.0.up_proj",
+        "experts.0.down_proj",
+    ],
+    "fused_qkv_a_proj": ["q_a_proj", "kv_a_proj_with_mqa"],
+}
+```
+
+否则权重加载时容易出现 q/kv 或 expert 权重名称对不上。
+
+7. 第一阶段启动参数
+
+第一阶段可以仍然用 `vllm serve`，但你只看它是否完成权重加载。建议参数保守：
+
+```bash
+export VLLM_USE_V1=1
+export VLLM_PLUGINS=ascend,ascend_model_loader,pangu_v2_moe
+export VLLM_PANGU_V2_MODEL_IMPL=omni
+export CUSTOM_MODEL_CONFIG_PATH=low_latency/openpangu_v2/pangu_v2_moe_bf16_a2_dp4tp8_hybrid.json
+
+export VLLM_ASCEND_ENABLE_MLAPO=0
+export VLLM_ASCEND_ENABLE_FUSED_MC2=0
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+```
+
+启动时先用：
+
+```bash
+--enforce-eager
+--no-enable-prefix-caching
+--max-model-len 1024
+--max-num-seqs 1
+--max-num-batched-tokens 128
+--gpu-memory-utilization 0.75
+```
+
+第一阶段通过标准：日志显示模型权重加载完成。如果随后在 KV cache 初始化 OOM，先不要调参，进入第二阶段修 KV spec。
+
+---
+
+**第二阶段：不开图、不启 prefix caching，服务能拉起**
+
+这个阶段的核心不是权重，而是 `pangu_v2_hybrid`。你必须把这组补丁迁移到 vLLM 0.18.0，而不是只注册模型类。
+
+最小必须迁移这些能力：
+
+1. `MomeSpec`
+2. `NPUPanguMome` attention backend
+3. `MomeAttention`
+4. hybrid KV cache spec 生成逻辑
+5. `UniformTypeKVCacheSpecs` 对 `MomeSpec` 的识别
+6. `single_type_kv_cache_manager` 对 `MomeSpec` 的 manager 映射
+7. vllm-ascend worker/model_runner 里加载 omni extra config
+
+`pangu_v2_hybrid` 目录里最关键的是这些文件：
+
+```text
+patch_kv_cache_interface.py
+patch_single_type_kv_cache_manager.py
+patch_kv_cache_utils.py
+patch_worker_utils.py
+patch_mome_hybrid.py
+patch_mome.py
+patch_models_config.py
+patch_modelconfig.py
+```
+
+第二阶段建议按下面顺序做。
+
+1. 先迁移 `MomeSpec`
+
+目标是这句能成功：
+
+```python
+from vllm.v1.kv_cache_interface import MomeSpec
+```
+
+`MomeSpec` 应该继承 `MambaSpec`，但 page size 不能按普通 Mamba 算。它要按：
+
+```python
+num_total_tokens = kernel_size - 1 + num_spec_tokens
+```
+
+计算 MoME state 的实际 page size。
+
+如果这个没生效，最常见现象就是你现在遇到的：权重加载完，进入 KV cache 初始化后 OOM，且调小 `max-num-seqs` 和 `max-model-len` 效果很差。
+
+2. 修改 `UniformTypeKVCacheSpecs.is_uniform_type`
+
+注意顺序很重要，`MomeSpec` 继承 `MambaSpec`，所以必须先判断 `MomeSpec`，再判断 `MambaSpec`：
+
+```python
+elif isinstance(one_spec, MomeSpec):
+    return all(
+        isinstance(spec, MomeSpec)
+        and spec.num_total_tokens == one_spec.num_total_tokens
+        for spec in kv_cache_specs.values()
+    )
+elif isinstance(one_spec, MambaSpec):
+    return all(
+        isinstance(spec, MambaSpec)
+        and spec.num_speculative_blocks == one_spec.num_speculative_blocks
+        for spec in kv_cache_specs.values()
+    )
+```
+
+3. 给 `single_type_kv_cache_manager` 加 `MomeSpec` manager
+
+不能简单完全当普通 `MambaSpec`。至少要让：
+
+```python
+spec_manager_map[MomeSpec] = MomeManager
+```
+
+并确认 `MomeManager` 的 block 数、page 数、request block 分配逻辑和 omni 里的 `patch_single_type_kv_cache_manager.py` 一致。
+
+这一步不对，服务会在 KV 初始化或第一次 decode 时出问题。
+
+4. 迁移 `MomeAttention`
+
+优先迁移这个路径：
+
+```python
+from vllm.model_executor.layers.npumome import MomeAttention
+```
+
+并让它实际使用 omni 的：
+
+```python
+omni_npu.layers.attention.npu_sparse_attentions.MomeAttention
+```
+
+第二阶段先不要走 `AggregateConv`，也就是保持：
+
+```json
+"use_noncontiguous_kv": true
+```
+
+因为 `AggregateConv` 还依赖旧的：
+
+```python
+forward_context.cache_slot_id
+```
+
+而 vLLM 0.18.0 标准字段是：
+
+```python
+forward_context.slot_mapping
+```
+
+这个路径后面再修，不要放进第二阶段首轮目标。
+
+5. 注册 `NPUPanguMome` backend
+
+`omni_npu/attention/backends/mome.py` 里注册的是：
+
+```python
+NPUPanguMome
+```
+
+你要确认运行时 attention backend registry 里能找到它，并且 `MomeAttention.get_attn_backend()` 最终能拿到这个 backend。
+
+检查点：
+
+```python
+from omni_npu.attention.backends.mome import NPUPanguMomeBackend
+from vllm.v1.kv_cache_interface import MomeSpec
+```
+
+这两个 import 都必须成功。
+
+6. 确保 extra config 被加载
+
+你的 910B 配置要用：
+
+```bash
+export CUSTOM_MODEL_CONFIG_PATH=low_latency/openpangu_v2/pangu_v2_moe_bf16_a2_dp4tp8_hybrid.json
+```
+
+并确认日志里看到加载了 omni extra config。重点值：
+
+```json
+"enable_flashcomm2": false,
+"use_noncontiguous_kv": true,
+"use_mome_inplace_update": true
+```
+
+第二阶段建议继续关闭：
+
+```bash
+export VLLM_ASCEND_ENABLE_MLAPO=0
+export VLLM_ASCEND_ENABLE_FUSED_MC2=0
+```
+
+7. 第二阶段启动参数
+
+4 机 DP4TP8 可以继续这样：
+
+```bash
+export VLLM_USE_V1=1
+export VLLM_PLUGINS=ascend,ascend_kv_connector,ascend_model_loader,ascend_service_profiling,pangu_v2_moe
+export VLLM_PANGU_V2_MODEL_IMPL=omni
+export VLLM_PANGU_V2_KV_DEBUG=1
+export CUSTOM_MODEL_CONFIG_PATH=low_latency/openpangu_v2/pangu_v2_moe_bf16_a2_dp4tp8_hybrid.json
+
+vllm serve /path/to/model \
+  --served-model-name openpangu-505b \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --tensor-parallel-size 8 \
+  --data-parallel-size 4 \
+  --data-parallel-size-local 1 \
+  --data-parallel-start-rank ${NODE_RANK} \
+  --data-parallel-address ${MASTER_IP} \
+  --data-parallel-rpc-port 13389 \
+  --distributed-executor-backend mp \
+  --enable-expert-parallel \
+  --no-disable-hybrid-kv-cache-manager \
+  --no-enable-prefix-caching \
+  --enforce-eager \
+  --max-model-len 1024 \
+  --max-num-seqs 1 \
+  --max-num-batched-tokens 128 \
+  --gpu-memory-utilization 0.75
+```
+
+非 master 节点加：
+
+```bash
+--headless
+```
+
+master 节点可以加：
+
+```bash
+--api-server-count 4
+```
+
+8. 第二阶段成功标准
+
+日志里应该看到：
+
+- 权重加载完成
+- KV cache groups 打印出来
+- `MomeSpec` 出现在 KV group 中
+- 没有把 MoME state 当成普通 `MambaSpec` 或普通 `MLAAttentionSpec`
+- KV cache 初始化完成
+- API server 开始监听端口
+
+如果仍 OOM，下一步不要先调 `gpu-memory-utilization`，而是看 `VLLM_PANGU_V2_KV_DEBUG=1` 打印出来的：
+
+```text
+spec=...
+block_size=...
+page_size_bytes=...
+layers=...
+```
+
+重点检查有没有异常巨大的 `page_size_bytes`，以及 MoME 层是否被错误合并进普通 attention group。
+
+**你现在最应该优先做的事**
+
+第一阶段：先补 import + `MomeAttention` 路径 + packed mapping + `get_mamba_state_copy_func`，确认权重能加载完。
+
+第二阶段：只迁移 `pangu_v2_hybrid` 里和 KV/MoME 直接相关的补丁，先不要碰 static sink、prefix caching、spec decode、graph。也就是先跑通：
+
+```text
+param_sink_number=0
+use_noncontiguous_kv=true
+prefix caching off
+spec decode off
+enforce eager
+```
+
+这个路径跑通后，再逐个打开性能项。
+
+> https://gitee.com/omniai/omni-npu/tree/release_1.2.1/ 使用这里的omni-infer代码部署pangu_v2_moe,505B版本，1p1d，8台910B机器，p,d节点各4台，服务可以成功拉起，但是在请求几次之后服务就会崩，可能是出现了断链问题，可能是哪部分代码问题，该如何解决？ ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.085 [msg_handler_plugin.cc:77]49332 Connect: ErrorNo: 1343270921(local cluster link with remote cluster failed!) [GE][MODULE]Failed to connect peer 7.242.104.225:15575, error msg:Connection refused, errno:111 [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.238 [link_msg_handler.cc:378]49332 LinkCluster: ErrorNo: 4294967295(failed) [GE][MODULE]Failed to connect remote addr 7.242.104.225:15575, timeout=5000 ms. [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.262 [llm_link_manager.cc:60]49332 operator(): ErrorNo: 4294967295(failed) [GE][MODULE]Failed to link cluster, remote_cluster_id = 572635419227135744, remote_role_type = 0. [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.307 [llm_link_manager.cc:70]37765 LinkClusters: ErrorNo: 1343270921(local cluster link with remote cluster failed!) [GE][MODULE]Failed to link clusters, index = 0 [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.975 [hccl_transfer_engine.cc:59]37765 LinkClusters: ErrorNo: 4294967295(failed) [GE][MODULE]Failed to link clusters, clusters size:1, timeout:5000 [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.994 [llm_datadist_v2.cc:349]37765 LinkClusters: ErrorNo: 4294967295(failed) [GE][MODULE]Failed to link clusters. 这种报错一般什么原因
+
+<details><summary>10 previous messages</summary>
+
+> Stream error
+>
+> Reconnecting... 2/5
+> request timed out
+>
+> Stream error
+>
+> Reconnecting... 3/5
+> request timed out
+>
+> Stream error
+>
+> Reconnecting... 4/5
+> request timed out
+>
+> Stream error
+>
+> Reconnecting... 5/5
+> request timed out
+>
+> 我先把这个报错当成 P/D 分离里的 datadist/HCCL cluster link 问题来查，不先归因到模型算子。`Connection refused` 很关键：它通常说明对端进程或监听端口已经没了、端口没开放、或者 cluster 信息里的 IP/port 不是当前真实监听地址。
+>
+> <details><summary>Ran 2 commands, searched web 1 time</summary>
+>
+> <details><summary>Searched web 1 time</summary>
+>
+> - Searched web for `site:gitee.com/omniai/omni-npu release_1.2.1 llm_datadist_v2 LinkClusters local cluster link with remote cluster failed Connection refused ...`
+>
+> </details>
+>
+> - Ran `rg -n "llm_datadist|LinkClusters|cluster|remote_cluster|remote addr|port|listen|connector|KV|kv_transfer|llmdatadist" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu -g "*.py"`
+>
+> - Ran `Get-ChildItem -Recurse -File D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector | Select-Object FullName,Length`
+>
+> </details>
+>
+> 从代码看，`LLMDataDistConnector` 里有两套通道：一套是给请求元数据/KV 拉取调度的 ZMQ 端口，另一套是 CANN/GE 侧的 llmdatadist cluster link。你日志里的 `llm_datadist_v2.cc` 是后者，说明不是 OpenAI HTTP 断了，而是 D 节点在向 P 节点拉 KV 时，底层 cluster 链接被拒绝。
+>
+> <details><summary>Ran 10 commands</summary>
+>
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py | Select-Object -Skip 130 -First 360`
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py | Select-Object -First 260`
+> - Ran `rg -n "LLMDATADIST|VLLM_LLMDATADIST|kv_ip|kv_port|kv_parallel|rank|host_ip|base_port|cluster_id|link|unlink|heartbeat|remote_host" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\utils.py`
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py | Select-Object -Skip 260 -First 260`
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py | Select-Object -Skip 640 -First 300`
+> - Ran `rg -n "LLMDATADIST_BASE_PORT|BLOCK_RELEASE_DELAY|CLUSTER_HEARTBEAT|HEARTBEAT_INTERVAL|get_local_ip|def ip_port_to_int|def cluster_id_to_ip_port|VLLM_LLMDATADIST" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\*.py`
+> - Ran `rg -n "LLMDATADIST_BASE_PORT|BLOCK_RELEASE_DELAY|CLUSTER_HEARTBEAT|HEARTBEAT_INTERVAL|get_local_ip|def ip_port_to_int|def cluster_id_to_ip_port|VLLM_LLMDATADIST" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector -g "*.py"`
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py | Select-Object -Skip 940 -First 90`
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py | Select-Object -Skip 500 -First 240`
+> - Ran `rg -n "p_node_list|kv_producer_dp_size|kv_connector_extra_config|kv_port|VLLM_LLMDATADIST_BASE_PORT|LLMDataDistConnector|kv_connector" D:\workspace\pangu-v2-moe-vllm-ascend018\src D:\workspace\pangu-v2-moe-vllm-ascend018\docs D:\workspace\pangu-v2-moe-vllm-ascend018\scripts -g "*.py" -g "*.md" -g "*.sh"`
+>
+> </details>
+>
+> 这里出现了一个非常有价值的信号：报错连的是 `7.242.104.225:15575`。omni 代码默认 `VLLM_LLMDATADIST_BASE_PORT=15567`，而 prefill 每张卡监听 `base_port + local_rank`，8 卡机器通常只会监听 `15567..15574`。`15575 = 15567 + 8`，这很像把“每机器 die/device 数”按 16 算了，导致 rank 8 仍被映射到第一台机器的第 9 个端口。
+>
+> <details><summary>Ran 1 command</summary>
+>
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\utils.py | Select-Object -Skip 170 -First 80`
+>
+> </details>
+</details>
+
+这个报错一般不是模型算子本身，而是 **P/D 分离 KV 传输的 LLMDataDist 链路断了或连错了对端端口**。
+
+你这条最关键：
+
+```text
+Failed to connect peer 7.242.104.225:15575
+Connection refused
+```
+
+`Connection refused` 说明对端 IP 能到，但该端口没人监听，或监听进程已经退出。
+
+**最高概率原因**
+omni-npu 这版代码默认：
+
+```python
+NUM_DIE_PER_MACH = int(os.getenv("NUM_DIE_PER_MACH", "16"))
+LLMDATADIST_BASE_PORT = int(os.getenv("VLLM_LLMDATADIST_BASE_PORT", 15567))
+```
+
+但你是 910B，通常每台 8 卡。Prefill 每张卡监听：
+
+```text
+15567 + local_rank
+```
+
+所以 8 卡机器只应该有：
+
+```text
+15567 ~ 15574
+```
+
+而日志里 D 节点去连：
+
+```text
+15575 = 15567 + 8
+```
+
+这非常像代码把“每台机器 16 个 die/device”算进去了，于是把 P rank 8 错误映射成了第一台 P 机器的第 9 个端口，而实际上 rank 8 应该落到第二台 P 机器的 `15567`。
+
+先在所有 P/D 节点统一加：
+
+```bash
+export NUM_DIE_PER_MACH=8
+```
+
+然后重启全部 P/D 服务。
+
+同时确认 P 节点上监听端口：
+
+```bash
+ss -ltnp | egrep '1556[7-9]|1557[0-9]'
+```
+
+每台 8 卡 P 节点应该看到类似：
+
+```text
+15567
+15568
+15569
+15570
+15571
+15572
+15573
+15574
+```
+
+不应该依赖 `15575`。
+
+**第二个高概率问题：heartbeat 端口不一致**
+
+代码里 P 侧 heartbeat bind 是：
+
+```python
+hb_port = VLLM_LLMDATADIST_HEARTBEAT_PORT or base_port - 1
+self.hb_socket.bind(f"tcp://{self.host_ip}:{hb_port}")
+```
+
+D 侧订阅却是：
+
+```python
+hb_ip_port = remote_ip + ":" + (hb_sub_port + dp_rank)
+```
+
+也就是说 D 侧会按 prefill dp rank 去订阅：
+
+```text
+15566 + dp_rank
+```
+
+但 P 侧如果每台机器都只 bind `15566`，那么 dp_rank > 0 的 P 节点心跳会被 D 侧误判超时，之后 D 会 close link / rebuild link，请求跑几次后就可能出现你说的“断链”。
+
+建议补丁二选一。
+
+如果每个 P dp rank 都在不同机器，最简单是改 D 侧，不要加 `dp_rank`：
+
+```python
+hb_ip_port = f"tcp://{hb_sub_ip}:{hb_sub_port}"
+```
+
+如果要兼容同机多 P，则改 P 侧，让它也加 dp rank：
+
+```python
+dp_rank = vllm_config.parallel_config.data_parallel_rank
+hb_port = int(os.environ.get(
+    "VLLM_LLMDATADIST_HEARTBEAT_PORT",
+    int(datadist_host_port) - 1,
+))
+hb_port += dp_rank
+self.hb_socket.bind(f"tcp://{self.host_ip}:{hb_port}")
+```
+
+你的部署是 P/D 各 4 台机器，我更倾向第一种，心跳端口按机器固定即可。
+
+**第三个要检查的是 p_node_list**
+
+P 节点列表必须是 4 个 prefill 节点 IP，顺序稳定，并且所有相关进程看到的一致：
+
+```json
+"kv_connector_extra_config": {
+  "p_node_list": ["P0_IP", "P1_IP", "P2_IP", "P3_IP"],
+  "kv_producer_dp_size": 4
+}
+```
+
+如果 `p_node_list` 顺序错，或者缺节点，也会把 remote cluster id 解到错误 IP/port。
+
+**建议排查顺序**
+
+1. 所有节点设置：
+
+```bash
+export NUM_DIE_PER_MACH=8
+```
+
+2. 确认 P 节点监听 `15567~15574`。
+3. 确认没有任何 D 节点再尝试连接 `P_IP:15575`。
+4. 修 heartbeat 端口逻辑，避免 dp_rank > 0 被误判超时。
+5. 检查 P 节点在崩溃前是否已有更早的 OOM、算子报错、进程退出；`Connection refused` 也可能是 P rank 进程先死了。
+6. 确认 `p_node_list`、`kv_producer_dp_size=4`、P/D 的 DP rank 配置一致。
+
+我会优先改这两处：`NUM_DIE_PER_MACH=8` 和 heartbeat 端口一致性。你这个 `15575` 太典型了，先把端口映射修正，很多“请求几次后断链”的现象会直接消失。
+
+> NUM_DIE_PER_MACH = int(os.getenv("NUM_DIE_PER_MACH", "16"))
+> LLMDATADIST_BASE_PORT = int(os.getenv("VLLM_LLMDATADIST_BASE_PORT", 15567))这个代码在哪里
+
+在 omni-npu 代码里这个文件：
+
+[llmdatadist_connector_v1.py](D:/workspace/pangu-v2-moe-vllm-ascend018/src/omni_npu/connector/llmdatadist_connector_v1.py:51)
+
+对应位置是：
+
+```python
+BLOCK_RELEASE_DELAY = int(os.environ.get("BLOCK_RELEASE_DELAY", 600))
+LLMDATADIST_BASE_PORT = int(os.environ.get("VLLM_LLMDATADIST_BASE_PORT", 15567))
+HEARTBEAT_INTERVAL = 5
+CLUSTER_HEARTBEAT_TIMEOUT = 60
+```
+
+`NUM_DIE_PER_MACH` 在另一个文件：
+
+[llmdatadist_manager_v1.py](D:/workspace/pangu-v2-moe-vllm-ascend018/src/omni_npu/connector/llmdatadist_manager_v1.py:65)
+
+对应位置是：
+
+```python
+NUM_DIE_PER_MACH = int(os.getenv("NUM_DIE_PER_MACH", "16"))
+```
+
+所以你部署时不用先改源码，可以先在所有 P/D 节点启动前加：
+
+```bash
+export NUM_DIE_PER_MACH=8
+export VLLM_LLMDATADIST_BASE_PORT=15567
+```
+
+然后确认 P 节点实际监听的是 `15567~15574`。
+
+> 为什么服务能启动，而且一开始还能推理，只是推到一半崩了
+
+因为这个链路不是服务启动时一次性全部建好的，而是 **D 节点在真正需要从 P 节点拉某个请求的 KV cache 时，才动态建链**。
+
+omni-npu 这里的逻辑大概是：
+
+1. 服务启动
+   P/D 各自初始化模型、注册 KV cache、启动 scheduler/worker、监听端口。
+   这一步只说明本机进程、模型、KV cache 初始化没问题。
+
+2. 第一次请求或前几次请求
+   D 节点可能只连到了部分 P rank，或者请求刚好落在能连通的 P rank 上，所以能正常推理。
+
+3. 后续请求
+   当调度选择到另一个 P rank，D 侧才会调用 `link_clusters` 去连那个 P rank 的 `IP:port`。
+   如果端口映射错，例如把 8 卡机器当 16 卡机器算，就会去连不存在的端口：
+
+```text
+base_port 15567 + rank_offset 8 = 15575
+```
+
+但 8 卡机器上通常只监听：
+
+```text
+15567 ~ 15574
+```
+
+所以就出现：
+
+```text
+Connection refused
+```
+
+也就是说，启动成功只能证明“基础服务起来了”，不能证明所有 P/D KV 链路都已经被访问并验证过。
+
+另外还有一种情况：heartbeat 误判超时。服务刚启动时链路是好的，但跑一会儿后 D 侧认为 P 侧 heartbeat 超时，于是主动 `close_link`，后续请求再重连时就可能连错端口或连到已释放的 cluster id，于是中途崩。
+
+所以你看到“一开始能推理，推到一半崩”，非常符合：
+
+```text
+动态建链 + 端口映射错误 / heartbeat 误判 / 某个 P rank 先退出
+```
+
+优先验证两件事：
+
+```bash
+export NUM_DIE_PER_MACH=8
+```
+
+以及 P 节点是否只监听：
+
+```text
+15567~15574
+```
+
+如果日志里还出现 `15575`，基本就能坐实是 rank 到 IP/port 的映射错了。
+
+> 发送的前几个请求能推理完成并返回结果，后面才崩溃
+
+这更支持“动态链路/链路回收问题”，而不是模型启动或权重问题。
+
+前几个请求能完成，说明：
+
+- 模型权重、KV cache 初始化没问题
+- 至少有一部分 P/D 链路是通的
+- P 节点能产 KV，D 节点能拉 KV 并 decode
+- 推理算子本身大概率不是第一嫌疑
+
+后面才崩，常见是这几类：
+
+1. **请求后来命中了另一个 P rank / DP rank**
+
+前几个请求可能都落在可连通的 P rank。后续请求调度到另一个 P rank 时，D 才动态 `link_clusters`，于是连到错误端口，例如：
+
+```text
+15575
+```
+
+如果是 8 卡机器，这个端口通常不存在。
+
+2. **链路被 heartbeat 误判为超时后关闭**
+
+omni 这里 D 侧会订阅 P 侧 heartbeat。如果端口算法不一致，D 收不到某个 P rank 的 heartbeat，过一会儿会 close link。前几个请求在超时前能完成，之后链路被关，再请求就崩。
+
+3. **P 侧提前释放了 block**
+
+`BLOCK_RELEASE_DELAY` 默认 600 秒，理论上很长。但如果请求完成通知、ZMQ 回包或 remote request id 有问题，P 侧可能认为 D 已经拉完 KV 或清理状态异常。后续 D 再拉，就可能触发链路刷新/重连。
+
+4. **某个 P worker 进程其实已经异常退出**
+
+这时 D 后续去连对应端口，会直接：
+
+```text
+Connection refused
+```
+
+所以要看 P 侧在 D 报错前有没有更早的 OOM、CANN error、Python exception。
+
+你现在应该重点抓三类日志：
+
+```bash
+grep -E "15575|link|unlink|heartbeat timeout|remote_cluster_id|rank:.*linked|failed pull kv|refresh_link|Connection refused" *.log
+```
+
+如果看到：
+
+```text
+remote heartbeat timeout
+close_link
+rebuild_link
+Failed to connect ...:15575
+```
+
+就是 heartbeat/端口映射问题。
+
+建议先做两个动作：
+
+```bash
+export NUM_DIE_PER_MACH=8
+export BLOCK_RELEASE_DELAY=1800
+```
+
+然后重启全量 P/D。`NUM_DIE_PER_MACH=8` 修 rank 到端口映射；`BLOCK_RELEASE_DELAY=1800` 先排除 P 侧过早释放 block 的干扰。
+
+如果改完后仍崩，把第一次出现的这几行贴出来最有价值：
+
+- 第一个 `remote heartbeat timeout`
+- 第一个 `unlink`
+- 第一个 `refresh_link`
+- 第一个 `Connection refused`
+- 对应时间点 P 侧同一 rank 的日志
