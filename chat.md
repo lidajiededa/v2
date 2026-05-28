@@ -2510,31 +2510,11 @@ enforce eager
 
 > https://gitee.com/omniai/omni-npu/tree/release_1.2.1/ 使用这里的omni-infer代码部署pangu_v2_moe,505B版本，1p1d，8台910B机器，p,d节点各4台，服务可以成功拉起，但是在请求几次之后服务就会崩，可能是出现了断链问题，可能是哪部分代码问题，该如何解决？ ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.085 [msg_handler_plugin.cc:77]49332 Connect: ErrorNo: 1343270921(local cluster link with remote cluster failed!) [GE][MODULE]Failed to connect peer 7.242.104.225:15575, error msg:Connection refused, errno:111 [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.238 [link_msg_handler.cc:378]49332 LinkCluster: ErrorNo: 4294967295(failed) [GE][MODULE]Failed to connect remote addr 7.242.104.225:15575, timeout=5000 ms. [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.262 [llm_link_manager.cc:60]49332 operator(): ErrorNo: 4294967295(failed) [GE][MODULE]Failed to link cluster, remote_cluster_id = 572635419227135744, remote_role_type = 0. [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.307 [llm_link_manager.cc:70]37765 LinkClusters: ErrorNo: 1343270921(local cluster link with remote cluster failed!) [GE][MODULE]Failed to link clusters, index = 0 [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.975 [hccl_transfer_engine.cc:59]37765 LinkClusters: ErrorNo: 4294967295(failed) [GE][MODULE]Failed to link clusters, clusters size:1, timeout:5000 [ERROR] GE(37765,ker_DP8_EP8):2026-05-28-19:33:24.663.994 [llm_datadist_v2.cc:349]37765 LinkClusters: ErrorNo: 4294967295(failed) [GE][MODULE]Failed to link clusters. 这种报错一般什么原因
 
-<details><summary>10 previous messages</summary>
+<details><summary>4 previous messages</summary>
 
-> Stream error
->
-> Reconnecting... 2/5
-> request timed out
->
-> Stream error
->
-> Reconnecting... 3/5
-> request timed out
->
-> Stream error
->
-> Reconnecting... 4/5
-> request timed out
->
-> Stream error
->
-> Reconnecting... 5/5
-> request timed out
->
 > 我先把这个报错当成 P/D 分离里的 datadist/HCCL cluster link 问题来查，不先归因到模型算子。`Connection refused` 很关键：它通常说明对端进程或监听端口已经没了、端口没开放、或者 cluster 信息里的 IP/port 不是当前真实监听地址。
 >
-> <details><summary>Ran 2 commands, searched web 1 time</summary>
+> <details><summary>Searched web 1 time</summary>
 >
 > <details><summary>Searched web 1 time</summary>
 >
@@ -2542,36 +2522,11 @@ enforce eager
 >
 > </details>
 >
-> - Ran `rg -n "llm_datadist|LinkClusters|cluster|remote_cluster|remote addr|port|listen|connector|KV|kv_transfer|llmdatadist" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu -g "*.py"`
->
-> - Ran `Get-ChildItem -Recurse -File D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector | Select-Object FullName,Length`
->
 > </details>
 >
 > 从代码看，`LLMDataDistConnector` 里有两套通道：一套是给请求元数据/KV 拉取调度的 ZMQ 端口，另一套是 CANN/GE 侧的 llmdatadist cluster link。你日志里的 `llm_datadist_v2.cc` 是后者，说明不是 OpenAI HTTP 断了，而是 D 节点在向 P 节点拉 KV 时，底层 cluster 链接被拒绝。
 >
-> <details><summary>Ran 10 commands</summary>
->
-> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py | Select-Object -Skip 130 -First 360`
-> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py | Select-Object -First 260`
-> - Ran `rg -n "LLMDATADIST|VLLM_LLMDATADIST|kv_ip|kv_port|kv_parallel|rank|host_ip|base_port|cluster_id|link|unlink|heartbeat|remote_host" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\utils.py`
-> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py | Select-Object -Skip 260 -First 260`
-> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py | Select-Object -Skip 640 -First 300`
-> - Ran `rg -n "LLMDATADIST_BASE_PORT|BLOCK_RELEASE_DELAY|CLUSTER_HEARTBEAT|HEARTBEAT_INTERVAL|get_local_ip|def ip_port_to_int|def cluster_id_to_ip_port|VLLM_LLMDATADIST" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\*.py`
-> - Ran `rg -n "LLMDATADIST_BASE_PORT|BLOCK_RELEASE_DELAY|CLUSTER_HEARTBEAT|HEARTBEAT_INTERVAL|get_local_ip|def ip_port_to_int|def cluster_id_to_ip_port|VLLM_LLMDATADIST" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector -g "*.py"`
-> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_connector_v1.py | Select-Object -Skip 940 -First 90`
-> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\llmdatadist_manager_v1.py | Select-Object -Skip 500 -First 240`
-> - Ran `rg -n "p_node_list|kv_producer_dp_size|kv_connector_extra_config|kv_port|VLLM_LLMDATADIST_BASE_PORT|LLMDataDistConnector|kv_connector" D:\workspace\pangu-v2-moe-vllm-ascend018\src D:\workspace\pangu-v2-moe-vllm-ascend018\docs D:\workspace\pangu-v2-moe-vllm-ascend018\scripts -g "*.py" -g "*.md" -g "*.sh"`
->
-> </details>
->
 > 这里出现了一个非常有价值的信号：报错连的是 `7.242.104.225:15575`。omni 代码默认 `VLLM_LLMDATADIST_BASE_PORT=15567`，而 prefill 每张卡监听 `base_port + local_rank`，8 卡机器通常只会监听 `15567..15574`。`15575 = 15567 + 8`，这很像把“每机器 die/device 数”按 16 算了，导致 rank 8 仍被映射到第一台机器的第 9 个端口。
->
-> <details><summary>Ran 1 command</summary>
->
-> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\connector\utils.py | Select-Object -Skip 170 -First 80`
->
-> </details>
 </details>
 
 这个报错一般不是模型算子本身，而是 **P/D 分离 KV 传输的 LLMDataDist 链路断了或连错了对端端口**。
@@ -2882,3 +2837,360 @@ export BLOCK_RELEASE_DELAY=1800
 - 第一个 `refresh_link`
 - 第一个 `Connection refused`
 - 对应时间点 P 侧同一 rank 的日志
+
+> NUM_DIE_PER_MACH 这个参数是干什么的
+
+`NUM_DIE_PER_MACH` 在 omni-npu 的 P/D 分离 KV 传输里，用来表示 **一台机器上有多少个可参与 LLMDataDist 通信的 NPU die/rank 槽位**。
+
+代码里它主要用于把全局 P rank 映射成：
+
+```text
+P 节点 IP + 端口偏移
+```
+
+相关逻辑在：
+
+[llmdatadist_manager_v1.py](D:/workspace/pangu-v2-moe-vllm-ascend018/src/omni_npu/connector/llmdatadist_manager_v1.py:65)
+
+```python
+NUM_DIE_PER_MACH = int(os.getenv("NUM_DIE_PER_MACH", "16"))
+```
+
+后面会用：
+
+```python
+ip_port = ip_ports[p_rank // NUM_DIE_PER_MACH]
+port = base_port + (p_rank % NUM_DIE_PER_MACH)
+```
+
+也就是说，如果：
+
+```bash
+NUM_DIE_PER_MACH=8
+VLLM_LLMDATADIST_BASE_PORT=15567
+```
+
+那么一台 8 卡 910B 机器上的端口会映射为：
+
+```text
+rank 0 -> 15567
+rank 1 -> 15568
+...
+rank 7 -> 15574
+rank 8 -> 下一台机器的 15567
+```
+
+但如果默认是：
+
+```bash
+NUM_DIE_PER_MACH=16
+```
+
+那 rank 8 会被认为还在同一台机器上：
+
+```text
+rank 8 -> 同一台机器的 15575
+```
+
+而 8 卡 910B 机器通常没有第 9 个 NPU worker 监听 `15575`，于是 D 节点去连：
+
+```text
+P_IP:15575
+```
+
+就会报：
+
+```text
+Connection refused
+```
+
+所以在你这种 **8 台 910B，P/D 各 4 台，每台 8 卡** 的部署里，`NUM_DIE_PER_MACH` 应该设为：
+
+```bash
+export NUM_DIE_PER_MACH=8
+```
+
+它不是控制用几张卡推理的参数，而是控制 **P/D KV 通信里全局 rank 到机器 IP/端口的换算规则**。
+
+> 我前几次对服务发送请求会返回错误，但服务不崩，过一会就好了，也和NUM_DIE_PER_MACH这个参数有关吗？另外，原始代码是适配910C的，单机有16卡，除了NUM_DIE_PER_MACH这个环境变量外，还有哪些910B需要额外设置的环境变量或者改动吗？
+
+<details><summary>6 previous messages</summary>
+
+> Stream error
+>
+> Reconnecting... 2/5
+> request timed out
+>
+> Stream error
+>
+> Reconnecting... 3/5
+> request timed out
+>
+> Stream error
+>
+> Reconnecting... 4/5
+> request timed out
+>
+> Stream error
+>
+> Reconnecting... 5/5
+> request timed out
+>
+> 我会把这个分成两块：一块解释“刚开始请求报错、过一会又好”是不是同一个链路问题；另一块从 omni 代码里扫一下 910C/A3 假设，列出迁到 910B/A2 时除了 `NUM_DIE_PER_MACH` 以外最该统一的环境变量和配置项。
+>
+> <details><summary>Ran 3 commands</summary>
+>
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\low_latency\openpangu_v2\pangu_v2_moe_bf16_a3_xp1d_p.json`
+> - Ran `rg -n "NUM_DIE_PER_MACH|DECODE_POD_NUM|ASCEND|HCCL|910|A3|a3|A2|a2|VLLM_LLMDATADIST|BLOCK_RELEASE_DELAY|kv_producer_dp_size|p_node_list|kv_parallel_size|data_parallel|local_rank|local_rank_size|rank_table|LOCAL|WORLD|NODE|RANK" D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu D:\workspace\pangu-v2-moe-vllm-ascend018\scripts D:\workspace\pangu-v2-moe-vllm-ascend018\docs -g "*.py" -g "*.sh" -g "*.json" -g "*.md"`
+> - Ran `Get-Content -Path D:\workspace\pangu-v2-moe-vllm-ascend018\src\omni_npu\model_config\configs\low_latency\openpangu_v2\pangu_v2_moe_bf16_a2_dp4tp8_hybrid.json`
+>
+> </details>
+</details>
+
+有可能相关，但要看“前几次错误”的具体报错端口。
+
+如果前几次错误里也出现类似：
+
+```text
+Failed to connect peer P_IP:15575
+Connection refused
+```
+
+那就和 `NUM_DIE_PER_MACH` 高度相关。因为 910B 8 卡机器只应该映射到：
+
+```text
+15567 ~ 15574
+```
+
+但默认 `NUM_DIE_PER_MACH=16` 会把 rank 8 映射成同一台机器的 `15575`。
+
+如果前几次只是 timeout、remote kv not ready、pull kv failed，过一会儿自己恢复，那更像是 **P/D 服务刚启动后 LLMDataDist、ZMQ heartbeat、KV cache register 还没完全稳定**。这个链路是懒加载/动态建链的，不是服务一启动就把所有 P/D 链路都验证完。
+
+**910B 额外建议**
+
+除了：
+
+```bash
+export NUM_DIE_PER_MACH=8
+```
+
+我建议所有 P/D 节点统一设置这些：
+
+```bash
+export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export HCCL_IF_IP=<当前节点RoCE/业务网IP>
+
+export VLLM_LLMDATADIST_BASE_PORT=15567
+export VLLM_LLMDATADIST_ZMQ_PORT=5568
+export BLOCK_RELEASE_DELAY=1800
+
+export VLLM_ASCEND_ENABLE_MLAPO=0
+export VLLM_ASCEND_ENABLE_FUSED_MC2=0
+
+export CUSTOM_MODEL_CONFIG_PATH=low_latency/openpangu_v2/pangu_v2_moe_bf16_a2_dp4tp8_hybrid.json
+```
+
+如果 D 侧是 4 台机器，也建议显式设置：
+
+```bash
+export DECODE_POD_NUM=4
+```
+
+这个参数会参与 D rank 到 P rank 的映射。默认是 `1`，更像单个 decode pod 的假设。
+
+**配置也要改成 910B/A2 保守配置**
+
+不要继续用原始 A3 配置。A3 原配置里有：
+
+```json
+"ena_seq_parallel": true,
+"enable_flashcomm2": true,
+"moe_comm_strategy": "allgather_reducescatter"
+```
+
+910B 首轮建议改成类似：
+
+```json
+{
+  "model_parallel_config": {
+    "ena_seq_parallel": false,
+    "ena_context_parallel": false,
+    "enable_flashcomm2": false,
+    "enable_aicpu_dp_sync": false
+  },
+  "operator_optimization_config": {
+    "moe_comm_strategy": "dispatch_combine",
+    "use_noncontiguous_kv": true,
+    "use_mome_inplace_update": true,
+    "enable_multi_stream": false,
+    "enable_prefetch": false,
+    "expert_gate_up_prefetch": 0,
+    "expert_down_prefetch": 0,
+    "dense_mlp_prefetch": 0,
+    "lm_head_prefetch": 0,
+    "attn_prefetch": 0,
+    "use_mhc_fusion_op": false,
+    "disable_npu_top_k_top_p_sample": true
+  }
+}
+```
+
+**还有一个我会重点改的点**
+
+omni 这里 `get_local_ip()` 是通过连 `8.8.8.8` 自动取本机 IP。多网卡机器上它可能取到管理网 IP，不一定是 HCCL/RoCE 通信网 IP。建议改代码，让 LLMDataDist 优先用环境变量：
+
+```python
+def get_local_ip():
+    env_ip = os.getenv("VLLM_LLMDATADIST_IP") or os.getenv("HCCL_IF_IP")
+    if env_ip:
+        return env_ip
+    ...
+```
+
+`llmdatadist_connector_v1.py` 和 `llmdatadist_manager_v1.py` 里都有类似取本机 IP 的逻辑，最好都统一。
+
+**判断是否和 NUM_DIE 有关的方法**
+
+看错误端口：
+
+- 如果看到 `15575`、`15576`、`15577` 这种超过 `15574` 的端口，基本就是 `NUM_DIE_PER_MACH=16` 导致的 910B 映射错误。
+- 如果端口在 `15567~15574`，但 `Connection refused`，优先查对应 P rank 是否已启动、是否监听、是否进程先崩、端口是否被防火墙拦住。
+- 如果是 heartbeat timeout 后才断链，重点查 `VLLM_LLMDATADIST_HEARTBEAT_PORT` 和 P/D heartbeat 端口算法是否一致。
+
+所以你的情况我会先统一设置 `NUM_DIE_PER_MACH=8`、`DECODE_POD_NUM=4`、A2 extra config，再看日志里是否还会访问 `15575`。如果还会，那就是某处 rank/IP/port 映射仍然按 16 卡机器在算。
+
+> {
+>   "model_parallel_config": {
+>     "ena_seq_parallel": false,
+>     "ena_context_parallel": false,
+>     "enable_flashcomm2": false,
+>     "enable_aicpu_dp_sync": false
+>   },
+>   "operator_optimization_config": {
+>     "moe_comm_strategy": "dispatch_combine",
+>     "use_noncontiguous_kv": true,
+>     "use_mome_inplace_update": true,
+>     "enable_multi_stream": false,
+>     "enable_prefetch": false,
+>     "expert_gate_up_prefetch": 0,
+>     "expert_down_prefetch": 0,
+>     "dense_mlp_prefetch": 0,
+>     "lm_head_prefetch": 0,
+>     "attn_prefetch": 0,
+>     "use_mhc_fusion_op": false,
+>     "disable_npu_top_k_top_p_sample": true
+>   }
+> }这些改动是什么含义
+
+这些是把原本偏 910C/A3 的激进优化，切到 910B/A2 上更保守、更容易稳定的路径。含义如下。
+
+**model_parallel_config**
+
+```json
+"ena_seq_parallel": false
+```
+
+关闭 sequence parallel。
+A3 上可能用它减少单卡显存/通信压力，但 910B 多机 1p1d 先关闭更稳，避免额外的 token 切分、all-gather/reduce-scatter 和 P/D KV 对齐问题。
+
+```json
+"ena_context_parallel": false
+```
+
+关闭 context parallel。
+避免 prompt/context 维度再被切分，减少 KV cache、attention metadata、P/D 传输块编号的复杂度。
+
+```json
+"enable_flashcomm2": false
+```
+
+关闭 FlashComm2。
+这是更激进的通信/重排优化，依赖硬件、CANN、拓扑和算子支持。910B 首轮建议关掉，否则容易出现通信链路、shape 或同步问题。
+
+```json
+"enable_aicpu_dp_sync": false
+```
+
+关闭 AICPU DP 同步。
+这个路径通常还依赖 `HCCL_OP_EXPANSION_MODE=AI_CPU` 等环境。先关掉，避免 DP 协调走额外 AICPU/HCCL 扩展路径。
+
+**operator_optimization_config**
+
+```json
+"moe_comm_strategy": "dispatch_combine"
+```
+
+MoE expert 通信策略使用 dispatch/combine。
+比 `allgather_reducescatter` 更保守，通信模式更直接。910B 上先用它排除 A3 优化通信策略带来的不稳定。
+
+```json
+"use_noncontiguous_kv": true
+```
+
+使用非连续 KV cache 布局。
+Pangu V2 MoE / MoME hybrid attention 里，这个路径更贴近 omni 的 hybrid KV 设计，也能避免走 `AggregateConv` 那条旧路径。你现在的 pangu_v2_hybrid 更推荐保持 true。
+
+```json
+"use_mome_inplace_update": true
+```
+
+MoME state 原地更新。
+减少额外中间 tensor 和拷贝，通常也是这个模型适配里预期的路径。
+
+```json
+"enable_multi_stream": false
+```
+
+关闭多 stream。
+多 stream 能提升性能，但会增加异步执行和同步复杂度。服务刚适配或链路不稳时先关掉，便于定位问题。
+
+```json
+"enable_prefetch": false
+```
+
+关闭权重/算子预取总开关。
+A3 可能利用更大内存/带宽做预取，910B 上可能带来额外显存占用或时序问题。
+
+下面这些全设为 0，是分别关闭具体模块的预取：
+
+```json
+"expert_gate_up_prefetch": 0
+"expert_down_prefetch": 0
+"dense_mlp_prefetch": 0
+"lm_head_prefetch": 0
+"attn_prefetch": 0
+```
+
+含义分别是：
+
+- `expert_gate_up_prefetch`: MoE expert 的 gate/up 投影预取
+- `expert_down_prefetch`: MoE expert down 投影预取
+- `dense_mlp_prefetch`: dense MLP 预取
+- `lm_head_prefetch`: 输出头预取
+- `attn_prefetch`: attention 层预取
+
+910B 上先关掉，主要是为了减少额外内存占用和异步预取导致的时序风险。
+
+```json
+"use_mhc_fusion_op": false
+```
+
+关闭 MHC fusion op。
+融合算子通常对硬件/CANN/shape 更敏感。先关掉，避免融合算子不支持 910B 或某些 batch/seq shape。
+
+```json
+"disable_npu_top_k_top_p_sample": true
+```
+
+禁用 NPU 侧 top-k/top-p sampling 算子。
+让采样走更通用路径。这个对性能有影响，但稳定性更好，尤其是先排查服务崩溃时。
+
+**一句话总结**
+
+这套配置的目的不是性能最优，而是：
+
+```text
+少切分、少融合、少预取、少多流、少特殊通信路径
+```
+
+先让 910B 上 1p1d P/D 服务稳定跑通。等链路和推理稳定后，再逐个打开优化项做压测。
