@@ -1,0 +1,543 @@
+# https://gitcode.com/ascend-tribe/openPangu-2.0-Infer/tree/9…
+
+> https://gitcode.com/ascend-tribe/openPangu-2.0-Infer/tree/92B_A2/tools 把这个仓下载下来
+
+<details><summary>4 previous messages</summary>
+
+> 我来把这个 GitCode 仓库拉到当前工作区里。链接指向 `92B_A2` 分支下的 `tools` 目录，所以我会优先克隆该分支的完整仓库，方便目录结构保持原样。
+>
+> 当前目录本身已经是一个 Git 工作区（有 `.git`），所以我会把远端仓库克隆到子目录 `openPangu-2.0-Infer`，避免覆盖你当前目录的 Git 状态。
+>
+> 克隆已经完成了，我再快速确认一下分支和 `tools` 目录是否在预期位置。
+>
+> `tools` 目录已经在本地了，里面有 `ansible`、`docker`、`quant`、`scripts`。最后一个状态检查还没回显，我等它结束确认一下仓库干净。
+</details>
+
+下载好了，仓库在：
+
+[C:\Users\李杰\Documents\openpangu\openPangu-2.0-Infer](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer>)
+
+已切到 `92B_A2` 分支，`tools` 目录也确认存在，路径是：
+
+[C:\Users\李杰\Documents\openpangu\openPangu-2.0-Infer\tools](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools>)
+
+> 比较一下tools/ansible/template/omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml 和tools/ansible/template/omni_infer_server_template_performance1P1D_92B_bf16_open.yml 这两个有什么区别？
+
+<details><summary>3 previous messages</summary>
+
+> 我来直接对这两个模板做结构化 diff，再读一下差异附近的上下文，给你归纳成可执行层面的区别。
+>
+> 差异范围很小，基本集中在 prefill/decode 启动脚本里的环境变量和资源参数。我再取一下行号，方便你定位。
+>
+> 定位到了：`A2_open` 多了几组日志/profiler/A2A 环境变量；普通 `open` 则把部分并发/显存参数调得不一样。下面我按运行影响归纳。
+</details>
+
+这两个文件绝大部分内容一样，差异只在 `run_vllm_server_prefill_cmd` 和 `run_vllm_server_decode_cmd` 两段里。
+
+**主要区别**
+
+| 位置 | `*_A2_open.yml` | `*_open.yml` | 影响 |
+|---|---:|---:|---|
+| Prefill `GPU_UTIL` | `0.85` | `0.8` | A2 版 prefill 显存利用率更高 |
+| Decode `GPU_UTIL` | `0.85` | `0.82` | A2 版 decode 显存利用率更高 |
+| Decode `LOCAL_WORLD_SIZE` | `8` | `16` | 普通 open 版按 16 个本地 world size 配置，A2 版是 8 |
+| Decode A2A 通信 | 有 `export OMNI_NPU_USE_DEVICE_COMM_A2A=1` | 无 | A2 版启用了 NPU device-to-device A2A 通信相关开关 |
+| Prefill 日志配置 | 有 `ASCEND_SLOG_PRINT_TO_STDOUT`、`ASCEND_GLOBAL_EVENT_ENABLE`、`ASCEND_PROCESS_LOG_PATH`、清理 `${LOG_PATH}/plog/*` | 无 | A2 版额外配置 Ascend plog/slog |
+| Decode 日志配置 | 同上 | 无 | A2 版额外配置 Ascend plog/slog |
+| Prefill profiler | 有 `VLLM_TORCH_PROFILER_DIR=${LOG_PATH}/profiling` 和 `WITH_STACK=0` | 无 | A2 版会设置 profiler 输出目录 |
+| Decode profiler | 有 `VLLM_TORCH_PROFILER_DIR=${LOG_PATH}/profiling` 和重复设置 `WITH_STACK=0` | 无 | A2 版会设置 profiler 输出目录 |
+
+对应行号大致是：
+
+- A2 文件：[omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/ansible/template/omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml:87>)
+- 普通 open 文件：[omni_infer_server_template_performance1P1D_92B_bf16_open.yml](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/ansible/template/omni_infer_server_template_performance1P1D_92B_bf16_open.yml:93>)
+
+一句话总结：`A2_open` 更像是面向 A2 硬件/通信路径的模板，启用了 `OMNI_NPU_USE_DEVICE_COMM_A2A`，显存利用率更激进，并保留了更多 Ascend 日志和 profiler 配置；普通 `open` 版去掉了这些日志/profiler/A2A 开关，同时把 decode 的 `LOCAL_WORLD_SIZE` 调成了 `16`。
+
+> 看一下 a2版启动服务，要做哪些事情
+
+<details><summary>3 previous messages</summary>
+
+> 我来顺着 A2 版模板和 ansible 目录看启动链路：需要准备哪些配置、跑哪些 tag、以及模板实际会在容器里生成/执行什么脚本。
+>
+> A2 的 inventory 模板也在同一个目录，启动不是只跑一个 yml：需要先把 inventory 里的机器/IP/卡号/端口这些填好，再按 tag 分阶段执行 docker、server、proxy。
+>
+> README 里给的是普通 bf16 的命令；套到 A2 版时，文件名要换成 `*_A2_open.yml`，inventory 也换成 `omni_infer_inventory_used_for_1P1D_A2.yml`。我再看一下 README 的具体准备项。
+</details>
+
+A2 版启动服务大概分成三件事：改配置、起容器、起服务。
+
+**1. 先改两个文件**
+
+在目录 [tools/ansible/template](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/ansible/template>) 下用这两个 A2 文件：
+
+- inventory：[omni_infer_inventory_used_for_1P1D_A2.yml](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/ansible/template/omni_infer_inventory_used_for_1P1D_A2.yml>)
+- playbook：[omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/ansible/template/omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml>)
+
+inventory 里要填：
+
+- `P` 节点 IP：prefill 节点
+- `D` 节点 IP：decode 节点
+- `C` 节点 IP：proxy 节点，通常放在 P 节点
+- `ascend_rt_visible_devices`：A2 版默认是 `"0,1,2,3,4,5,6,7"`
+- 端口：`global_port_base`、`base_api_port`、`proxy_port`
+
+playbook 头部 `environment` 要改：
+
+- `LOG_PATH`：日志目录
+- `MODEL_PATH`：模型权重目录，P/D 节点路径要一致
+- `LOG_PATH_IN_EXECUTOR`：拉日志用
+- `DOCKER_IMAGE_ID`：实际 A2 镜像名
+- `DOCKER_NAME_P` / `DOCKER_NAME_D` / `DOCKER_NAME_C`
+- `SCRIPTS_PATH`：生成启动脚本的位置
+- 必要时改 `MODEL_LEN_MAX_PREFILL`、`MODEL_LEN_MAX_DECODE`、`DECODE_TENSOR_PARALLEL_SIZE`
+
+**2. 准备机器环境**
+
+执行机需要装 `ansible`，并且能免密 SSH 到 P/D/C 节点，默认用户是 `root`。
+
+各节点需要提前有：
+
+- Docker
+- Ascend 驱动/CANN 环境
+- `/dev/davinci_manager`、`/dev/hisi_hdc`、`/dev/devmm_svm`
+- `/usr/local/Ascend/driver`
+- `/usr/local/dcmi`
+- `/etc/hccn.conf`
+- `/usr/bin/hccn_tool`
+- 模型目录和日志目录
+
+playbook 里的 docker 会挂载 `/data`、`/mnt`、`/tmp`、`/home`、Ascend 驱动目录、模型目录、日志目录、脚本目录。
+
+**3. 启动命令**
+
+进入模板目录：
+
+```bash
+cd tools/ansible/template
+```
+
+先创建 P/D/C 三类容器：
+
+```bash
+ansible-playbook -i omni_infer_inventory_used_for_1P1D_A2.yml \
+  omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml \
+  --tags run_docker
+```
+
+然后启动推理服务和 proxy：
+
+```bash
+ansible-playbook -i omni_infer_inventory_used_for_1P1D_A2.yml \
+  omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml \
+  --tags run_server,run_proxy
+```
+
+注意：`run_docker` 会检查并删除同名容器，再重新创建，所以同名容器里有东西的话要小心。
+
+**它实际会做什么**
+
+`run_server,run_proxy` 阶段会：
+
+1. 计算 P/D/C 的服务列表、DP 数、offset 等变量。
+2. 给 P 容器生成 `$SCRIPTS_PATH/vllm_run_for_p.sh`。
+3. 给 D 容器生成 `$SCRIPTS_PATH/vllm_run_for_d.sh`。
+4. 自动取默认网卡作为通信网卡。
+5. 在 D 节点先启动 decode 服务。
+6. 在 P 节点启动 prefill 服务。
+7. 给 C 容器生成并启动 `run_proxy_server.sh`，里面会跑 `omni_proxy.sh`。
+8. proxy 默认监听 inventory 里的 `proxy_port`，A2 inventory 默认是 `2000`。
+
+A2 版特有的关键点是 decode 里启了：
+
+```bash
+export OMNI_NPU_USE_DEVICE_COMM_A2A=1
+export LOCAL_WORLD_SIZE=8
+```
+
+同时 P/D 都会跑 `/workspace/omniinfer/tools/scripts/pd_run.sh`，并带上低时延配置、Pangu reasoning/tool-call parser、prefix caching、chunked prefill、speculative tokens 等参数。
+
+> 仓内没有提供混部方式，但理论上可以pd部署就可以混部，你能否分析下源码看下如何混部？
+
+<details><summary>5 previous messages</summary>
+
+> 我来从 ansible 模板、`pd_run.sh` 和 proxy/脚本参数一路追一下。重点看它是否允许 P/D/C 指向同一台机器、如何用不同卡号隔离，以及哪些地方默认假设 P 和 D 是不同主机。
+>
+> `pd_run.sh` 这里已经看到一个关键条件：P/D 的隔离主要靠 `--ascend-rt-visible-devices` 传入不同卡号，以及 `kv_rank/kv_parallel_size` 区分 KV 通信角色；它本身没有要求 P/D 必须是不同物理机。接下来我看 `start_api_servers.py` 怎么分配端口/设备。
+>
+> 有一个很重要的发现：inventory 里的 `ascend_rt_visible_devices` 只被模板用于算数量和传给 prefill，但最终 `start_api_servers.py` 会把每个 vLLM 子进程的 `ASCEND_RT_VISIBLE_DEVICES` 重写成从 0 开始的连续编号。这意味着“同机 P 用 0-3、D 用 4-7”光改 inventory 大概率不生效，得改脚本或用容器级隔离。
+>
+> 仓里其实还有一个 `components/omni-npu/examples/serve-pd-disaggregate.sh`，它不是 ansible，但写法更接近“同机 PD 混部”：直接给 prefill/decode 分别设置 `ASCEND_RT_VISIBLE_DEVICES`。我看它的启动参数，能反推 ansible 需要补哪些东西。
+>
+> 另一个混部坑：默认端口在分机没问题，但同机时可能撞。P 的 `api_port` 默认 7000，模板里还算了一个 `ENDPOINT_PORT=api_port+100`，而 D 的 `api_port` 默认也是 7100；即使这个 `KV_EVENTS_CONFIG` 当前没继续传进 `EXTRA_ARGS`，混部时最好把 D 端口段整体后移，避免后续打开事件配置时踩雷。
+</details>
+
+可以，源码看下来结论是：**PD 混部理论上能走通，但当前 ansible 模板不是完整的混部实现，直接只改 inventory 会有设备隔离问题。**
+
+**源码里的启动模型**
+它的 PD 部署本质是三类进程：
+
+- P：prefill vLLM，`kv_role=kv_producer`
+- D：decode vLLM，`kv_role=kv_consumer`
+- C：proxy，把请求先发 P，再带着 `kv_transfer_params` 发 D
+
+关键链路在：
+
+- [A2 ansible 模板](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/ansible/template/omni_infer_server_template_performance1P1D_92B_bf16_A2_open.yml:794>)
+- [pd_run.sh](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/scripts/pd_run.sh:274>)
+- [start_api_servers.py](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/scripts/start_api_servers.py:161>)
+
+**混部应该怎么表达**
+inventory 里可以用不同 host alias 指向同一台机器：
+
+```yaml
+P:
+  hosts:
+    p0:
+      ansible_host: "10.0.0.1"
+      host_ip: "10.0.0.1"
+      ascend_rt_visible_devices: "0,1,2,3"
+      kv_rank: 0
+      node_rank: 0
+
+D:
+  hosts:
+    d0:
+      ansible_host: "10.0.0.1"
+      host_ip: "10.0.0.1"
+      ascend_rt_visible_devices: "4,5,6,7"
+      node_rank: 0
+
+C:
+  hosts:
+    c0:
+      ansible_host: "10.0.0.1"
+```
+
+这样 ansible 会在同一台物理机上创建 P/D/C 三个容器，容器名因为带 `inventory_hostname` 后缀，所以不会冲突。
+
+**但现在直接这样改还不够**
+最大的问题在 [start_api_servers.py:161](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/tools/scripts/start_api_servers.py:161>)：
+
+```python
+env["ASCEND_RT_VISIBLE_DEVICES"] = ",".join(map(str, range(rank*tp*pp, (rank+1)*tp*pp)))
+```
+
+它会把传进来的设备列表重写成从 `0` 开始的连续编号。结果是：
+
+- 你配置 P 用 `0,1,2,3`
+- D 配 `4,5,6,7`
+- 但 D 最终启动时仍可能用 `0,1,2,3`
+
+所以混部必须改这里，让它尊重父进程传入的 `ASCEND_RT_VISIBLE_DEVICES`，按列表切片，而不是硬编码从 0 开始。
+
+同时 A2 模板的 decode 调 `pd_run.sh` 时目前没有传：
+
+```bash
+--ascend-rt-visible-devices "${DECODE_SERVER_LIST}"
+```
+
+这个也要补上。
+
+**建议改法**
+`start_api_servers.py` 里把设备分配改成这种逻辑：
+
+```python
+visible = [
+    x.strip()
+    for x in os.environ.get("ASCEND_RT_VISIBLE_DEVICES", "").split(",")
+    if x.strip()
+]
+start = rank * tp * pp
+end = (rank + 1) * tp * pp
+
+if visible:
+    env["ASCEND_RT_VISIBLE_DEVICES"] = ",".join(visible[start:end])
+else:
+    env["ASCEND_RT_VISIBLE_DEVICES"] = ",".join(map(str, range(start, end)))
+```
+
+然后在 A2 模板 decode 的 `pd_run.sh` 参数里补：
+
+```bash
+--ascend-rt-visible-devices "${DECODE_SERVER_LIST}" \
+```
+
+另外，如果 D 只混部用 4 张卡，A2 模板里的：
+
+```bash
+export LOCAL_WORLD_SIZE=8
+```
+
+也建议改成：
+
+```bash
+export LOCAL_WORLD_SIZE=${NUM_SERVERS}
+```
+
+**端口也要避开**
+默认 P 的 API 是 `7000`，D 是 `7100`。模板里 P 还算了 `ENDPOINT_PORT=api_port+100`，也就是 `7100`。当前这个 `KV_EVENTS_CONFIG` 没实际传给 vLLM，但混部时建议直接把 D 端口段后移，比如：
+
+```yaml
+port_offset:
+  P: 0
+  D: 200
+```
+
+这样 P API 是 `7000`，D API 从 `7200` 开始，更稳。
+
+**一句话方案**
+混部方式就是：**P/D/C 用同一个 `ansible_host`，P/D 用不同 `ascend_rt_visible_devices` 和不同端口段；再修 `start_api_servers.py` 和 A2 playbook，让 decode 真正继承设备列表。**
+
+仓里 `components/omni-npu/examples/serve-pd-disaggregate.sh` 已经证明了这个思路：它就是同机启动 P 和 D，并分别设置 `ASCEND_RT_VISIBLE_DEVICES`。ansible 版差的就是把这套设备隔离逻辑接完整。
+
+> 有不通过pd分离的部署方法吗，直接单机8卡不pd部署
+
+<details><summary>4 previous messages</summary>
+
+> 我来查一下仓里有没有单实例/非 PD 的启动脚本和说明。你问的是“单机 8 卡一个 vLLM 服务”，所以我会重点看 `examples`、`tools/docker` 和 README 里是否有不带 `kv-transfer-config` 的 serve 命令。
+>
+> 找到了：仓里有 `components/omni-npu/examples/serve-single-instance.sh`，这就是非 PD 的单实例启动脚本。现在我读一下它的参数，确认能不能直接按 8 卡 TP 来跑。
+>
+> 这个单实例脚本默认更像通用示例：模型名默认是 `deepseek`，网卡和可见卡也写死了。对于 openPangu 92B，要把它改成/替换成 Pangu 的插件、模型名和 8 卡 TP 参数。
+>
+> Pangu 92B 的模型配置里有 `config_file` 这种单实例配置项，不只是 PD 的 `prefill_config_file/decode_config_file`。这说明非 PD 运行应该使用 hybrid/single 的 config，而不是 P/D 专用 config。
+</details>
+
+有。仓里提供了非 PD 的单实例脚本：
+
+[serve-single-instance.sh](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/components/omni-npu/examples/serve-single-instance.sh:1>)
+
+它本质就是直接跑一个 `vllm serve`，不启动 P/D 两套服务，不启动 proxy，也不传 `--kv-transfer-config`。
+
+直接单机 8 卡可以按这个思路跑：
+
+```bash
+export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export VLLM_PLUGINS="omni-npu,omni_npu_patches,omni_custom_models"
+export OMNI_NPU_PATCHES_DIR="pangu_v2_hybrid,pangu_v2_moe"
+export OMNI_NPU_VLLM_PATCHES="ALL"
+export CUSTOM_MODEL_CONFIG_PATH="low_latency/openpangu_v2/pangu_v2_moe_bf16_a3_hybrid.json"
+export ASCEND_GLOBAL_LOG_LEVEL=3
+export HCCL_OP_EXPANSION_MODE=AIV
+export VLLM_USE_V1=1
+export VLLM_WORKER_MULTIPROC_METHOD=fork
+export TORCH_COMPILE_DISABLE=1
+
+vllm serve /path/to/model/weights \
+  --served-model-name openPangu-2.0-Flash \
+  --host 0.0.0.0 \
+  --port 7000 \
+  --dtype bfloat16 \
+  --trust-remote-code \
+  --tensor-parallel-size 8 \
+  --data-parallel-size 1 \
+  --distributed-executor-backend mp \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 524288 \
+  --enable-expert-parallel \
+  --reasoning-parser pangu \
+  --enable-auto-tool-choice \
+  --tool-call-parser pangu
+```
+
+关键点：
+
+- 不要跑 `pd_run.sh`
+- 不要起 `omni_proxy.sh`
+- 不要加 `--kv-transfer-config`
+- `--tensor-parallel-size 8` 对应单机 8 卡
+- `ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7` 控制用哪 8 张卡
+
+仓里的 [serve-single-instance.sh](</C:/Users/李杰/Documents/openpangu/openPangu-2.0-Infer/components/omni-npu/examples/serve-single-instance.sh:122>) 默认写的是通用模型，最后还硬编码了 `0..15`，所以用于 A2 单机 8 卡时建议直接用上面的命令，或者改脚本最后一行的 `ASCEND_RT_VISIBLE_DEVICES` 和默认模型名。
+
+注意一点：`92B bf16` 单机 8 卡是否能稳跑，取决于每卡显存和 `max-model-len`。如果 OOM，先把 `--max-model-len` 降下来，比如 `32768` 或 `65536`，再逐步调大。
+
+> 把一些图模式和mtp之类的参数，参照pd的，也加上啊
+
+<details><summary>1 previous message</summary>
+
+> 对，单实例命令如果只是裸 `vllm serve` 会少掉 PD 模板里那些性能开关。我按 A2 bf16 PD 模板里的 decode 侧为主、prefill 侧补充 `max-num-batched-tokens` 和低时延参数，整理一版更接近它的单机 8 卡启动命令。
+</details>
+
+可以，单机非 PD 版可以加上这些参数。更贴近 A2 PD 模板的命令如下：
+
+```bash
+export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export VLLM_PLUGINS="omni-npu,omni_npu_patches,omni_custom_models"
+export HYBRID_ATTN_GROUP_SIZE=17
+export OMNI_NPU_PATCHES_DIR="pangu_v2_hybrid, pangu_v2_moe"
+export OMNI_NPU_VLLM_PATCHES="ALL"
+export CUSTOM_MODEL_CONFIG_PATH="low_latency/openpangu_v2/pangu_v2_moe_bf16_a3_hybrid.json"
+
+export ASCEND_GLOBAL_LOG_LEVEL=3
+export HCCL_OP_EXPANSION_MODE="AI_CPU"
+export HCCL_BUFFSIZE=1200
+export HCCL_CONNECT_TIMEOUT=1800
+export HCCL_EXEC_TIMEOUT=1800
+export HCCL_OP_RETRY_ENABLE="L0:0,L1:0,L2:0"
+
+export OMNI_REUSE_PREFILLED_TOKENS=1
+export OMNI_SKIP_DECODE_TOKENIZE=1
+export VLLM_MQ_MAX_CHUNK_BYTES_MB=100
+export PANGU_TOOL_CALL_ENDS_THINKING=1
+export TORCH_COMPILE_DISABLE=1
+export VLLM_CACHE_ROOT="./graph_cache"
+export VLLM_TORCH_PROFILER_WITH_PROFILE_MEMORY=False
+export VLLM_TORCH_PROFILER_WITH_STACK=False
+export VLLM_TORCH_PROFILER_WITH_FLOPS=False
+export TASK_QUEUE_ENABLE=1
+export VLLM_ENABLE_MC2=1
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export LOCAL_WORLD_SIZE=8
+
+vllm serve /path/to/model/weights \
+  --served-model-name openPangu-2.0-Flash \
+  --host 0.0.0.0 \
+  --port 7000 \
+  --dtype bfloat16 \
+  --trust-remote-code \
+  --tensor-parallel-size 8 \
+  --data-parallel-size 1 \
+  --distributed-executor-backend mp \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 524288 \
+  --max-num-batched-tokens 16384 \
+  --max-num-seqs 3 \
+  --no-disable-hybrid-kv-cache-manager \
+  --enable-expert-parallel \
+  --disable-log-requests \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --reasoning-parser pangu \
+  --enable-auto-tool-choice \
+  --tool-call-parser pangu \
+  --enable-lopt \
+  --lopt-pool-size 16 \
+  --lopt-chunk-size 4096 \
+  --compilation-config '{"level":3,"cudagraph_mode":"FULL","cudagraph_capture_sizes":[12],"backend":"","compile_sizes":[12]}' \
+  --additional-config '{"enable_low_latency":true,"npugraph_ex_config":{"enable":true,"super_kernel_optimize":false,"static_kernel_compile":false}}' \
+  --reasoning-config '{"reasoning_start_str":"<think>","reasoning_end_str":"</think>"}' \
+  --speculative_config '{"method":"mtp","num_speculative_tokens":3}'
+```
+
+这里对应 PD 里的几个关键增强：
+
+- 图模式：`--compilation-config ... cudagraph_mode FULL`
+- NPU graph：`--additional-config ... npugraph_ex_config`
+- MTP：`--speculative_config '{"method":"mtp","num_speculative_tokens":3}'`
+- 低时延：`enable_low_latency`
+- prefix cache / chunked prefill / lopt 都按 PD 模板补上了
+- 单机 8 卡：`ASCEND_RT_VISIBLE_DEVICES=0..7` + `--tensor-parallel-size 8`
+
+如果启动报显存不够，优先降这几个：`--max-model-len`、`--max-num-batched-tokens`、`--gpu-memory-utilization`、`--max-num-seqs`。
+
+> 如果我要两天a2，以非pd的方式，tp16来部署，要怎么做
+
+<details><summary>2 previous messages</summary>
+
+> 两台 A2 做非 PD 的 TP16，思路就是“一个 vLLM 实例跨两台机器做 TP”，不要 P/D/proxy。仓里的 PD prefill 多机分支也是用 Ray 把多节点拼起来，所以非 PD 也建议按 Ray executor 来跑。
+>
+> <details><summary>Ran 2 commands</summary>
+>
+> - Ran `Get-Content components/omni-eplb/scripts/start_ray.sh`
+> - Ran `Get-Content components/omni-eplb/scripts/start_serving.sh`
+>
+> </details>
+</details>
+
+我按“**两台 A2**”理解。非 PD、TP16 的做法是：两台机器各 8 卡，先拉一个 Ray 集群，然后只在 head 节点启动一个 `vllm serve`，参数用 `--tensor-parallel-size 16 --distributed-executor-backend ray`。
+
+**两台机器都先设环境**
+把网卡名换成你的实际通信网卡：
+
+```bash
+export ASCEND_RT_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export GLOO_SOCKET_IFNAME=eth0
+export TP_SOCKET_IFNAME=eth0
+export HCCL_SOCKET_IFNAME=eth0
+
+export RAY_EXPERIMENTAL_NOSET_ASCEND_RT_VISIBLE_DEVICES=1
+export RAY_DEDUP_LOGS=0
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+
+export VLLM_PLUGINS="omni-npu,omni_npu_patches,omni_custom_models"
+export HYBRID_ATTN_GROUP_SIZE=17
+export OMNI_NPU_PATCHES_DIR="pangu_v2_hybrid, pangu_v2_moe"
+export OMNI_NPU_VLLM_PATCHES="ALL"
+export CUSTOM_MODEL_CONFIG_PATH="low_latency/openpangu_v2/pangu_v2_moe_bf16_a3_hybrid.json"
+
+export ASCEND_GLOBAL_LOG_LEVEL=3
+export HCCL_OP_EXPANSION_MODE=AIV
+export HCCL_BUFFSIZE=1200
+export HCCL_CONNECT_TIMEOUT=1800
+export HCCL_EXEC_TIMEOUT=1800
+export HCCL_OP_RETRY_ENABLE="L0:0,L1:0,L2:0"
+
+export VLLM_USE_V1=1
+export VLLM_WORKER_MULTIPROC_METHOD=fork
+export VLLM_ENABLE_MC2=1
+export TASK_QUEUE_ENABLE=1
+export TORCH_COMPILE_DISABLE=1
+export PANGU_TOOL_CALL_ENDS_THINKING=1
+```
+
+**head 节点启动 Ray**
+假设 head IP 是 `10.0.0.1`：
+
+```bash
+ray stop --force
+ray start --head --node-ip-address=10.0.0.1 --port=6377 --num-gpus=8
+```
+
+**worker 节点加入 Ray**
+假设 worker IP 是 `10.0.0.2`：
+
+```bash
+ray stop --force
+ray start --address=10.0.0.1:6377 --node-ip-address=10.0.0.2 --num-gpus=8
+```
+
+**只在 head 节点启动 vLLM**
+模型路径要求两台机器都能访问，最好路径一致：
+
+```bash
+vllm serve /path/to/model/weights \
+  --served-model-name openPangu-2.0-Flash \
+  --host 0.0.0.0 \
+  --port 7000 \
+  --dtype bfloat16 \
+  --trust-remote-code \
+  --tensor-parallel-size 16 \
+  --data-parallel-size 1 \
+  --distributed-executor-backend ray \
+  --gpu-memory-utilization 0.82 \
+  --max-model-len 524288 \
+  --max-num-batched-tokens 16384 \
+  --max-num-seqs 3 \
+  --no-disable-hybrid-kv-cache-manager \
+  --enable-expert-parallel \
+  --disable-log-requests \
+  --enable-prefix-caching \
+  --enable-chunked-prefill \
+  --reasoning-parser pangu \
+  --enable-auto-tool-choice \
+  --tool-call-parser pangu \
+  --enable-lopt \
+  --lopt-pool-size 16 \
+  --lopt-chunk-size 4096 \
+  --compilation-config '{"level":3,"cudagraph_mode":"FULL","cudagraph_capture_sizes":[12],"backend":"","compile_sizes":[12]}' \
+  --additional-config '{"enable_low_latency":true,"npugraph_ex_config":{"enable":true,"super_kernel_optimize":false,"static_kernel_compile":false}}' \
+  --reasoning-config '{"reasoning_start_str":"<think>","reasoning_end_str":"</think>"}' \
+  --speculative_config '{"method":"mtp","num_speculative_tokens":3}'
+```
+
+核心区别就是：
+
+- 单机 8 卡：`mp + tp8`
+- 两台 A2 非 PD：`ray + tp16`
+- 不启动 proxy
+- 不传 `--kv-transfer-config`
+- 不区分 prefill/decode
+
+如果启动时 OOM，优先把 `--max-model-len 524288` 降到 `65536` 或 `32768` 验证链路，确认 TP16 跨机跑通后再往上调。
